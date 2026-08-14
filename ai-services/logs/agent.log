@@ -1,0 +1,175 @@
+TrafficAgent started analysis
+TrafficAgent decision: Use Route B
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: Use Route B
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: Use Route B
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+EmergencyAgent started analysis
+EmergencyAgent decision: Monitor situation
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 6, 'medium': 10, 'low': 4}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Monitor situation
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 6, 'medium': 10, 'low': 4}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Monitor situation
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Normal Route', 'best_route': ['Hospital', 'SectorB', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 13, 'medium': 22, 'low': 10}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Monitor situation
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Monitor situation
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 9, 'medium': 15, 'low': 6}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 9, 'medium': 15, 'low': 6}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}
+EmergencyAgent started analysis
+EmergencyAgent decision: Activate rescue teams
+TrafficAgent started analysis
+TrafficAgent decision: {'route_status': 'Alternate Route Activated', 'best_route': ['Hospital', 'SectorB', 'SectorC', 'DisasterZone']}
+MedicalAgent started analysis
+MedicalAgent decision: {'critical': 12, 'medium': 20, 'low': 8}
+ResourceAgent started analysis
+ResourceAgent decision: {'ambulances': 10, 'rescue_teams': 5}

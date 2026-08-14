@@ -1,0 +1,5 @@
+TrafficAgent failed: division by zero
+EmergencyAgent failed: 'GlobalContext' object has no attribute 'update_context'
+TrafficAgent failed: 'GlobalContext' object has no attribute 'update_context'
+MedicalAgent failed: 'GlobalContext' object has no attribute 'update_context'
+ResourceAgent failed: 'GlobalContext' object has no attribute 'update_context'
