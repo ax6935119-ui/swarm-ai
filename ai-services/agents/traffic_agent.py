@@ -18,9 +18,9 @@ class TrafficAgent(BaseAgent):
 
         self.build_city_graph()
 
-    # =========================================================
+    # ========================================================
     # GRAPH
-    # =========================================================
+    # ========================================================
 
     def build_city_graph(self):
 
@@ -40,9 +40,9 @@ class TrafficAgent(BaseAgent):
 
         ])
 
-    # =========================================================
+    # ========================================================
     # ANALYZE
-    # =========================================================
+    # ========================================================
 
     def analyze(
         self,
@@ -54,9 +54,9 @@ class TrafficAgent(BaseAgent):
             "ANALYZING"
         )
 
-        # =====================================================
-        # TRAFFIC LEVEL
-        # =====================================================
+        # ====================================================
+        # TRAFFIC
+        # ====================================================
 
         traffic_level = event.get(
             "traffic_level"
@@ -84,18 +84,36 @@ class TrafficAgent(BaseAgent):
                 30
             )
 
-        # =====================================================
-        # DISASTER ZONE
-        # =====================================================
+        # ====================================================
+        # DISASTER
+        # ====================================================
 
         disaster_zone = event.get(
             "zone",
             "DisasterZone"
         )
 
-        # =====================================================
-        # LOCATION
-        # =====================================================
+        location = event.get(
+            "location",
+            "Unknown"
+        )
+
+        disaster = event.get(
+            "disaster",
+            event.get(
+                "disaster_type",
+                "Unknown Disaster"
+            )
+        )
+
+        severity = event.get(
+            "severity",
+            0
+        )
+
+        # ====================================================
+        # COORDINATES
+        # ====================================================
 
         scenario_lat = event.get(
             "latitude"
@@ -117,10 +135,6 @@ class TrafficAgent(BaseAgent):
                 "lng"
             )
 
-        # =====================================================
-        # CONFIDENCE
-        # =====================================================
-
         self.set_confidence(
             event.get(
                 "confidence",
@@ -128,67 +142,29 @@ class TrafficAgent(BaseAgent):
             )
         )
 
-        # =====================================================
-        # HISTORICAL MEMORY
-        # =====================================================
+        # ====================================================
+        # TRAFFIC RISK
+        # ====================================================
 
-        historical_context = context.get(
-            "historical_context",
-            []
-        )
+        if traffic_level >= 80:
 
-        historical_count = len(
-            historical_context
-        )
+            traffic_risk = "critical"
 
-        historical_high_traffic = sum(
+        elif traffic_level >= 60:
 
-            1
+            traffic_risk = "high"
 
-            for historical in historical_context
+        elif traffic_level >= 40:
 
-            if historical.get(
-                "traffic_impact"
-            ) == "high"
+            traffic_risk = "medium"
 
-        )
+        else:
 
-        historical_medium_traffic = sum(
+            traffic_risk = "low"
 
-            1
-
-            for historical in historical_context
-
-            if historical.get(
-                "traffic_impact"
-            ) == "medium"
-
-        )
-
-        # =====================================================
-        # HISTORICAL LOCATION MATCHES
-        # =====================================================
-
-        current_location = event.get(
-            "location",
-            "Unknown"
-        )
-
-        historical_location_matches = sum(
-
-            1
-
-            for historical in historical_context
-
-            if historical.get(
-                "location"
-            ) == current_location
-
-        )
-
-        # =====================================================
-        # AGENT COMMUNICATION
-        # =====================================================
+        # ====================================================
+        # COMMUNICATION
+        # ====================================================
 
         communication_manager = context.get(
             "communication_manager"
@@ -205,48 +181,45 @@ class TrafficAgent(BaseAgent):
 
                 receiver="ResourceAgent",
 
-                message=
-                f"Heavy traffic detected near "
-                f"{disaster_zone}. "
-                f"Additional emergency routing "
-                f"may be required."
-
+                message=(
+                    f"Heavy traffic detected near "
+                    f"{location}. Traffic level: "
+                    f"{traffic_level}/100. "
+                    f"Alternate emergency routing "
+                    f"should be prioritized."
+                )
             )
-
-        # =====================================================
-        # RETURN ANALYSIS
-        # =====================================================
 
         return {
 
             "traffic_level":
                 traffic_level,
 
+            "traffic_risk":
+                traffic_risk,
+
             "disaster_zone":
                 disaster_zone,
+
+            "location":
+                location,
+
+            "disaster":
+                disaster,
+
+            "severity":
+                severity,
 
             "latitude":
                 scenario_lat,
 
             "longitude":
-                scenario_lng,
-
-            "historical_events_considered":
-                historical_count,
-
-            "historical_high_traffic":
-                historical_high_traffic,
-
-            "historical_medium_traffic":
-                historical_medium_traffic,
-
-            "historical_location_matches":
-                historical_location_matches
+                scenario_lng
         }
 
-    # =========================================================
+    # ========================================================
     # DECIDE
-    # =========================================================
+    # ========================================================
 
     def decide(
         self,
@@ -261,39 +234,17 @@ class TrafficAgent(BaseAgent):
             "traffic_level"
         ]
 
-        historical_high_traffic = analysis.get(
-            "historical_high_traffic",
-            0
-        )
+        disaster_zone = analysis[
+            "disaster_zone"
+        ]
 
-        historical_location_matches = analysis.get(
-            "historical_location_matches",
-            0
-        )
+        location = analysis[
+            "location"
+        ]
 
-        # =====================================================
-        # HISTORICAL TRAFFIC ESCALATION
-        # =====================================================
-
-        if (
-
-            traffic_level <= 70
-
-            and
-
-            historical_high_traffic >= 2
-
-            and
-
-            historical_location_matches >= 1
-
-        ):
-
-            traffic_level = 75
-
-        # =====================================================
+        # ====================================================
         # ROUTE
-        # =====================================================
+        # ====================================================
 
         if traffic_level > 70:
 
@@ -329,9 +280,9 @@ class TrafficAgent(BaseAgent):
                 "Normal Route"
             )
 
-        # =====================================================
-        # ROUTE COORDINATES
-        # =====================================================
+        # ====================================================
+        # COORDINATES
+        # ====================================================
 
         route_coordinates = []
 
@@ -352,10 +303,6 @@ class TrafficAgent(BaseAgent):
             scenario_lng is not None
 
         )
-
-        # =====================================================
-        # REAL-WORLD LOCATION
-        # =====================================================
 
         if has_scenario_coordinates:
 
@@ -410,59 +357,56 @@ class TrafficAgent(BaseAgent):
 
             ]
 
-        # =====================================================
-        # LEGACY CITY SCENARIO
-        # =====================================================
-
         else:
 
-            for location in shortest_path:
+            for location_name in shortest_path:
 
-                if location in CITY_ZONES:
+                if location_name in CITY_ZONES:
 
                     route_coordinates.append({
 
                         "zone":
-                            location,
+                            location_name,
 
                         "lat":
                             CITY_ZONES[
-                                location
+                                location_name
                             ]["lat"],
 
                         "lng":
                             CITY_ZONES[
-                                location
+                                location_name
                             ]["lng"]
 
                     })
 
-        # =====================================================
-        # DEBUG
-        # =====================================================
+        # ====================================================
+        # DECISION
+        # ====================================================
 
-        print(
-            "\nTrafficAgent Route:"
-        )
+        if traffic_level > 70:
 
-        print(
-            "   Status:",
-            route_status
-        )
+            recommendation = (
+                f"Activate alternate emergency "
+                f"route to {location} and prioritize "
+                f"ambulances, rescue vehicles and "
+                f"medical transportation"
+            )
 
-        print(
-            "   Path:",
-            shortest_path
-        )
+        elif traffic_level >= 50:
 
-        print(
-            "   Coordinates:",
-            route_coordinates
-        )
+            recommendation = (
+                f"Monitor congestion near {location} "
+                f"and prepare alternate emergency "
+                f"routing"
+            )
 
-        # =====================================================
-        # RETURN
-        # =====================================================
+        else:
+
+            recommendation = (
+                f"Maintain normal emergency routing "
+                f"to {location}"
+            )
 
         return {
 
@@ -473,13 +417,22 @@ class TrafficAgent(BaseAgent):
                 shortest_path,
 
             "route_coordinates":
-                route_coordinates
+                route_coordinates,
+
+            "recommendation":
+                recommendation,
+
+            "traffic_level":
+                traffic_level,
+
+            "disaster_zone":
+                disaster_zone
 
         }
 
-    # =========================================================
+    # ========================================================
     # RESPOND
-    # =========================================================
+    # ========================================================
 
     def respond(
         self,
@@ -497,7 +450,10 @@ class TrafficAgent(BaseAgent):
 
             self.name,
 
-            decision,
+            decision.get(
+                "recommendation",
+                "Optimize emergency routing"
+            ),
 
             {
 
@@ -519,7 +475,10 @@ class TrafficAgent(BaseAgent):
                 "traffic_level":
                     event.get(
                         "traffic_level",
-                        0
+                        decision.get(
+                            "traffic_level",
+                            0
+                        )
                     ),
 
                 "traffic_impact":
@@ -535,11 +494,14 @@ class TrafficAgent(BaseAgent):
                     )
 
             }
-
         )
 
         execution_time = round(
-            time.time() - start_time,
+
+            time.time()
+            -
+            start_time,
+
             3
         )
 
@@ -557,6 +519,9 @@ class TrafficAgent(BaseAgent):
             "execution_time":
                 f"{execution_time}s",
 
+            "decision":
+                decision,
+
             "traffic_response": {
 
                 "route_status":
@@ -572,6 +537,11 @@ class TrafficAgent(BaseAgent):
                 "route_coordinates":
                     decision[
                         "route_coordinates"
+                    ],
+
+                "recommendation":
+                    decision[
+                        "recommendation"
                     ]
 
             },

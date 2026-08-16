@@ -18,7 +18,7 @@ class EmergencyAgent(BaseAgent):
 
     def analyze(
         self,
-        data,
+        event,
         context
     ):
 
@@ -26,64 +26,87 @@ class EmergencyAgent(BaseAgent):
             "ANALYZING"
         )
 
-        severity = data.get(
+        severity = event.get(
             "severity",
             1
         )
 
-        evacuation_required = data.get(
+        evacuation_required = event.get(
             "evacuation_required",
             False
         )
 
-        self.set_confidence(
-            data.get(
-                "confidence",
-                0.94
+        disaster = event.get(
+            "disaster",
+            event.get(
+                "disaster_type",
+                "Unknown Disaster"
             )
         )
 
-        # ====================================================
+        location = event.get(
+            "location",
+            "Unknown"
+        )
+
+        # ----------------------------------------------------
         # HISTORICAL MEMORY
-        # ====================================================
+        # ----------------------------------------------------
 
         historical_context = context.get(
             "historical_context",
             []
         )
 
-        # ----------------------------------------------------
-        # Analyze historical emergency patterns
-        # ----------------------------------------------------
-
         historical_count = len(
             historical_context
         )
 
-        previous_high_severity = sum(
-            1
-            for event in historical_context
-            if event.get("severity", 0) >= 5
+        historical_severities = [
+
+            h.get(
+                "severity",
+                0
+            )
+
+            for h in historical_context
+
+            if isinstance(
+                h.get("severity", 0),
+                (int, float)
+            )
+        ]
+
+        previous_high_severity = any(
+            severity >= 7
+            for severity in historical_severities
         )
 
-        previous_critical_events = sum(
-            1
-            for event in historical_context
-            if event.get("severity", 0) >= 8
-        )
+        average_historical_severity = 0
 
-        previous_evacuations = sum(
-            1
-            for event in historical_context
-            if event.get(
-                "evacuation_required",
-                False
+        if historical_severities:
+
+            average_historical_severity = round(
+                sum(historical_severities)
+                /
+                len(historical_severities),
+                1
+            )
+
+        # ----------------------------------------------------
+        # CONFIDENCE
+        # ----------------------------------------------------
+
+        self.set_confidence(
+            event.get(
+                "confidence",
+                0.94
             )
         )
 
-        # ====================================================
+        # ----------------------------------------------------
         # DETERMINE EMERGENCY LEVEL
-        # ====================================================
+        # ----------------------------------------------------
 
         if (
             severity >= 8
@@ -100,24 +123,61 @@ class EmergencyAgent(BaseAgent):
 
             emergency_level = "normal"
 
-        # ====================================================
-        # MEMORY-BASED ESCALATION
-        # ====================================================
+        # ----------------------------------------------------
+        # HISTORICAL RISK
+        # ----------------------------------------------------
 
-        # If previous similar events were repeatedly severe,
-        # increase monitoring even when current severity is
-        # relatively lower.
+        historical_risk = "low"
 
-        if (
-            emergency_level == "normal"
-            and previous_critical_events >= 2
+        if previous_high_severity:
+
+            historical_risk = "high"
+
+        elif (
+            average_historical_severity >= 5
         ):
 
-            emergency_level = "high"
+            historical_risk = "medium"
 
-        # ====================================================
-        # RETURN ANALYSIS
-        # ====================================================
+        # ----------------------------------------------------
+        # AGENT COMMUNICATION
+        # ----------------------------------------------------
+
+        communication_manager = context.get(
+            "communication_manager"
+        )
+
+        if communication_manager:
+
+            if emergency_level == "critical":
+
+                communication_manager.send_message(
+
+                    sender=self.name,
+
+                    receiver="MedicalAgent",
+
+                    message=(
+                        f"Critical {disaster} detected "
+                        f"in {location}. "
+                        f"Severity {severity}/10. "
+                        f"Medical preparedness required."
+                    )
+                )
+
+                communication_manager.send_message(
+
+                    sender=self.name,
+
+                    receiver="ResourceAgent",
+
+                    message=(
+                        f"Critical emergency detected "
+                        f"in {location}. "
+                        f"Coordinate rescue resources "
+                        f"and evacuation support."
+                    )
+                )
 
         return {
 
@@ -130,17 +190,23 @@ class EmergencyAgent(BaseAgent):
             "evacuation_required":
                 evacuation_required,
 
-            "historical_events_considered":
+            "disaster":
+                disaster,
+
+            "location":
+                location,
+
+            "historical_count":
                 historical_count,
 
-            "previous_high_severity_events":
-                previous_high_severity,
+            "historical_risk":
+                historical_risk,
 
-            "previous_critical_events":
-                previous_critical_events,
+            "average_historical_severity":
+                average_historical_severity,
 
-            "previous_evacuations":
-                previous_evacuations
+            "previous_high_severity":
+                previous_high_severity
         }
 
     # ========================================================
@@ -156,6 +222,10 @@ class EmergencyAgent(BaseAgent):
             "DECIDING"
         )
 
+        severity = analysis[
+            "severity"
+        ]
+
         emergency_level = analysis[
             "emergency_level"
         ]
@@ -164,15 +234,17 @@ class EmergencyAgent(BaseAgent):
             "evacuation_required"
         ]
 
-        historical_events = analysis.get(
-            "historical_events_considered",
-            0
-        )
+        disaster = analysis[
+            "disaster"
+        ]
 
-        previous_critical = analysis.get(
-            "previous_critical_events",
-            0
-        )
+        location = analysis[
+            "location"
+        ]
+
+        historical_risk = analysis[
+            "historical_risk"
+        ]
 
         # ====================================================
         # CRITICAL
@@ -183,13 +255,26 @@ class EmergencyAgent(BaseAgent):
             if evacuation_required:
 
                 return (
-                    "Activate rescue teams "
-                    "and initiate emergency evacuation"
+                    f"Activate rescue teams and "
+                    f"initiate emergency evacuation "
+                    f"in {location}, prioritizing "
+                    f"high-risk areas affected by "
+                    f"{disaster}"
+                )
+
+            if historical_risk == "high":
+
+                return (
+                    f"Activate emergency rescue teams "
+                    f"in {location} and prepare for "
+                    f"rapid escalation based on "
+                    f"previous severe disaster patterns"
                 )
 
             return (
-                "Activate rescue teams "
-                "and establish immediate emergency response"
+                f"Activate rescue teams in {location} "
+                f"and establish immediate emergency "
+                f"response operations"
             )
 
         # ====================================================
@@ -198,21 +283,21 @@ class EmergencyAgent(BaseAgent):
 
         if emergency_level == "high":
 
-            if (
-                historical_events > 0
-                and previous_critical >= 1
+            if historical_risk in (
+                "medium",
+                "high"
             ):
 
                 return (
-                    "Deploy emergency response teams, "
-                    "increase monitoring, and prepare "
-                    "for rapid escalation based on "
-                    "historical disaster patterns"
+                    f"Deploy emergency response teams "
+                    f"in {location} and closely monitor "
+                    f"for escalation using historical "
+                    f"{disaster} patterns"
                 )
 
             return (
-                "Deploy emergency response "
-                "teams and monitor escalation"
+                f"Deploy emergency response teams "
+                f"in {location} and monitor escalation"
             )
 
         # ====================================================
@@ -220,8 +305,9 @@ class EmergencyAgent(BaseAgent):
         # ====================================================
 
         return (
-            "Monitor situation and maintain "
-            "emergency readiness"
+            f"Monitor the {disaster} situation "
+            f"in {location} and maintain emergency "
+            f"response readiness"
         )
 
     # ========================================================
@@ -239,6 +325,11 @@ class EmergencyAgent(BaseAgent):
         )
 
         start_time = time.time()
+
+        historical_context = event.get(
+            "historical_context",
+            []
+        )
 
         reasoning = generate_reasoning(
 
@@ -273,13 +364,21 @@ class EmergencyAgent(BaseAgent):
                     event.get(
                         "location",
                         "Unknown"
+                    ),
+
+                "historical_events":
+                    len(
+                        historical_context
                     )
             }
-
         )
 
         execution_time = round(
-            time.time() - start_time,
+
+            time.time()
+            -
+            start_time,
+
             3
         )
 
@@ -302,6 +401,7 @@ class EmergencyAgent(BaseAgent):
 
             "reasoning":
                 reasoning
+
         }
 
         self.set_status(

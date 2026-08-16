@@ -41,9 +41,38 @@ class ResourceAgent(BaseAgent):
             "low"
         )
 
+        traffic_level = event.get(
+            "traffic_level",
+            0
+        )
+
         medical_access_impact = event.get(
             "medical_access_impact",
             "low"
+        )
+
+        victims = event.get(
+            "victim_estimate"
+        )
+
+        if victims is None:
+
+            victims = event.get(
+                "victims",
+                0
+            )
+
+        location = event.get(
+            "location",
+            "Unknown"
+        )
+
+        disaster = event.get(
+            "disaster",
+            event.get(
+                "disaster_type",
+                "Unknown Disaster"
+            )
         )
 
         self.set_confidence(
@@ -66,69 +95,205 @@ class ResourceAgent(BaseAgent):
             historical_context
         )
 
-        # ====================================================
-        # HISTORICAL RESOURCE PRESSURE
-        # ====================================================
+        historical_severities = []
 
-        historical_severe_events = sum(
+        historical_victims = []
 
-            1
+        for historical in historical_context:
 
-            for historical in historical_context
-
-            if historical.get(
-                "severity",
-                0
-            ) >= 6
-
-        )
-
-        historical_evacuations = sum(
-
-            1
-
-            for historical in historical_context
-
-            if historical.get(
-                "evacuation_required",
-                False
+            h_severity = historical.get(
+                "severity"
             )
 
-        )
+            h_victims = historical.get(
+                "victims"
+            )
 
-        historical_high_traffic = sum(
+            if isinstance(
+                h_severity,
+                (int, float)
+            ):
 
-            1
-
-            for historical in historical_context
-
-            if (
-                historical.get(
-                    "traffic_impact"
+                historical_severities.append(
+                    h_severity
                 )
-                == "high"
-            )
 
-        )
+            if isinstance(
+                h_victims,
+                (int, float)
+            ):
 
-        historical_high_medical = sum(
-
-            1
-
-            for historical in historical_context
-
-            if (
-                historical.get(
-                    "medical_access_impact"
+                historical_victims.append(
+                    h_victims
                 )
-                == "high"
+
+        average_historical_severity = 0
+
+        average_historical_victims = 0
+
+        if historical_severities:
+
+            average_historical_severity = round(
+
+                sum(
+                    historical_severities
+                )
+                /
+                len(
+                    historical_severities
+                ),
+
+                1
             )
 
-        )
+        if historical_victims:
+
+            average_historical_victims = round(
+
+                sum(
+                    historical_victims
+                )
+                /
+                len(
+                    historical_victims
+                ),
+
+                1
+            )
 
         # ====================================================
-        # RETURN ANALYSIS
+        # RESOURCE PRIORITY
         # ====================================================
+
+        priority = "normal"
+
+        if (
+            severity >= 8
+            or evacuation_required
+            or medical_access_impact == "high"
+            or traffic_level >= 80
+        ):
+
+            priority = "critical"
+
+        elif (
+            severity >= 6
+            or traffic_level >= 60
+            or medical_access_impact == "medium"
+        ):
+
+            priority = "high"
+
+        # ====================================================
+        # RESOURCE TYPES
+        # ====================================================
+
+        resources = []
+
+        if (
+            severity >= 7
+            or evacuation_required
+        ):
+
+            resources.extend([
+
+                "rescue teams",
+
+                "evacuation vehicles",
+
+                "emergency shelters"
+
+            ])
+
+        if (
+            medical_access_impact
+            in (
+                "medium",
+                "high"
+            )
+            or
+            (
+                isinstance(
+                    victims,
+                    (int, float)
+                )
+                and victims > 20
+            )
+        ):
+
+            resources.extend([
+
+                "medical teams",
+
+                "medical supplies",
+
+                "ambulances"
+
+            ])
+
+        if traffic_level >= 60:
+
+            resources.extend([
+
+                "emergency transportation",
+
+                "alternate routing support"
+
+            ])
+
+        if not resources:
+
+            resources.append(
+                "limited emergency response units"
+            )
+
+        # ====================================================
+        # HISTORICAL RISK
+        # ====================================================
+
+        historical_risk = "low"
+
+        if (
+            average_historical_severity >= 7
+            or
+            average_historical_victims >= 30
+        ):
+
+            historical_risk = "high"
+
+        elif (
+            average_historical_severity >= 5
+            or
+            average_historical_victims >= 15
+        ):
+
+            historical_risk = "medium"
+
+        # ====================================================
+        # AGENT COMMUNICATION
+        # ====================================================
+
+        communication_manager = context.get(
+            "communication_manager"
+        )
+
+        if communication_manager:
+
+            if priority == "critical":
+
+                communication_manager.send_message(
+
+                    sender=self.name,
+
+                    receiver="EmergencyAgent",
+
+                    message=(
+                        f"Critical resource allocation "
+                        f"required in {location}. "
+                        f"Priority resources: "
+                        f"{', '.join(resources)}."
+                    )
+                )
 
         return {
 
@@ -141,23 +306,38 @@ class ResourceAgent(BaseAgent):
             "traffic_impact":
                 traffic_impact,
 
+            "traffic_level":
+                traffic_level,
+
             "medical_access_impact":
                 medical_access_impact,
 
-            "historical_events_considered":
+            "victims":
+                victims,
+
+            "location":
+                location,
+
+            "disaster":
+                disaster,
+
+            "priority":
+                priority,
+
+            "resources":
+                resources,
+
+            "historical_count":
                 historical_count,
 
-            "historical_severe_events":
-                historical_severe_events,
+            "historical_risk":
+                historical_risk,
 
-            "historical_evacuations":
-                historical_evacuations,
+            "average_historical_severity":
+                average_historical_severity,
 
-            "historical_high_traffic":
-                historical_high_traffic,
-
-            "historical_high_medical":
-                historical_high_medical
+            "average_historical_victims":
+                average_historical_victims
         }
 
     # ========================================================
@@ -181,151 +361,102 @@ class ResourceAgent(BaseAgent):
             "evacuation_required"
         ]
 
-        traffic_impact = analysis[
-            "traffic_impact"
+        traffic_level = analysis[
+            "traffic_level"
         ]
 
         medical_access_impact = analysis[
             "medical_access_impact"
         ]
 
-        historical_severe_events = analysis.get(
-            "historical_severe_events",
-            0
+        victims = analysis[
+            "victims"
+        ]
+
+        location = analysis[
+            "location"
+        ]
+
+        disaster = analysis[
+            "disaster"
+        ]
+
+        resources = analysis[
+            "resources"
+        ]
+
+        historical_risk = analysis[
+            "historical_risk"
+        ]
+
+        priority = analysis[
+            "priority"
+        ]
+
+        resource_list = ", ".join(
+            resources
         )
 
-        historical_evacuations = analysis.get(
-            "historical_evacuations",
-            0
-        )
-
-        historical_high_traffic = analysis.get(
-            "historical_high_traffic",
-            0
-        )
-
-        historical_high_medical = analysis.get(
-            "historical_high_medical",
-            0
-        )
-
         # ====================================================
-        # CRITICAL RESPONSE
+        # CRITICAL
         # ====================================================
 
-        if (
+        if priority == "critical":
 
-            severity >= 8
-
-            and
-
-            (
-                evacuation_required
-
-                or
-
-                medical_access_impact == "high"
-
-                or
-
-                traffic_impact == "high"
+            decision = (
+                f"Deploy {resource_list} "
+                f"in {location}. "
+                f"Prioritize immediate rescue, "
+                f"evacuation, medical support and "
+                f"emergency transportation for the "
+                f"{disaster} response"
             )
 
-        ):
+            if historical_risk == "high":
 
-            return (
-                "Deploy all emergency resources, "
-                "prioritize evacuation, medical support "
-                "and emergency transportation"
+                decision += (
+                    ". Increase resource readiness "
+                    f"based on previous high-impact "
+                    f"{disaster} events"
+                )
+
+            return decision
+
+        # ====================================================
+        # HIGH
+        # ====================================================
+
+        if priority == "high":
+
+            decision = (
+                f"Deploy additional {resource_list} "
+                f"in {location} and maintain "
+                f"emergency response readiness"
             )
 
-        # ====================================================
-        # HISTORICAL CRITICAL PRESSURE
-        # ====================================================
+            if (
+                isinstance(
+                    victims,
+                    (int, float)
+                )
+                and victims > 0
+            ):
 
-        if (
+                decision += (
+                    f" for approximately "
+                    f"{victims} affected people"
+                )
 
-            severity >= 6
-
-            and
-
-            historical_severe_events >= 2
-
-            and
-
-            (
-                historical_high_traffic >= 1
-                or
-                historical_high_medical >= 1
-            )
-
-        ):
-
-            return (
-                "Deploy additional emergency resources "
-                "and pre-position medical and "
-                "transportation support based on "
-                "historical disaster patterns"
-            )
-
-        # ====================================================
-        # HISTORICAL EVACUATION PATTERN
-        # ====================================================
-
-        if (
-
-            evacuation_required
-
-            or
-
-            historical_evacuations >= 2
-        ):
-
-            return (
-                "Prepare evacuation resources, "
-                "medical support and emergency "
-                "transportation"
-            )
-
-        # ====================================================
-        # HIGH RESPONSE
-        # ====================================================
-
-        if severity >= 6:
-
-            return (
-                "Deploy additional response units "
-                "and prepare emergency resources"
-            )
-
-        # ====================================================
-        # HIGH TRAFFIC
-        # ====================================================
-
-        if traffic_impact == "high":
-
-            return (
-                "Deploy additional traffic response "
-                "and emergency transportation resources"
-            )
-
-        # ====================================================
-        # HIGH MEDICAL IMPACT
-        # ====================================================
-
-        if medical_access_impact == "high":
-
-            return (
-                "Deploy additional medical response "
-                "resources and alternate access support"
-            )
+            return decision
 
         # ====================================================
         # NORMAL
         # ====================================================
 
         return (
-            "Deploy limited response units"
+            f"Deploy limited emergency resources "
+            f"in {location} and monitor the "
+            f"{disaster} situation for escalation"
         )
 
     # ========================================================
@@ -343,6 +474,17 @@ class ResourceAgent(BaseAgent):
         )
 
         start_time = time.time()
+
+        victims = event.get(
+            "victim_estimate"
+        )
+
+        if victims is None:
+
+            victims = event.get(
+                "victims",
+                0
+            )
 
         reasoning = generate_reasoning(
 
@@ -367,6 +509,9 @@ class ResourceAgent(BaseAgent):
                         0
                     ),
 
+                "victims":
+                    victims,
+
                 "evacuation_required":
                     event.get(
                         "evacuation_required",
@@ -377,6 +522,12 @@ class ResourceAgent(BaseAgent):
                     event.get(
                         "traffic_impact",
                         "low"
+                    ),
+
+                "traffic_level":
+                    event.get(
+                        "traffic_level",
+                        0
                     ),
 
                 "medical_access_impact":
@@ -390,13 +541,15 @@ class ResourceAgent(BaseAgent):
                         "location",
                         "Unknown"
                     )
-
             }
-
         )
 
         execution_time = round(
-            time.time() - start_time,
+
+            time.time()
+            -
+            start_time,
+
             3
         )
 
@@ -419,6 +572,7 @@ class ResourceAgent(BaseAgent):
 
             "reasoning":
                 reasoning
+
         }
 
         self.set_status(

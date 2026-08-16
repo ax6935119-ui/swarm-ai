@@ -26,10 +26,6 @@ class MedicalAgent(BaseAgent):
             "ANALYZING"
         )
 
-        # ====================================================
-        # CURRENT EVENT
-        # ====================================================
-
         victims = event.get(
             "victim_estimate"
         )
@@ -44,6 +40,24 @@ class MedicalAgent(BaseAgent):
         medical_access_impact = event.get(
             "medical_access_impact",
             "low"
+        )
+
+        severity = event.get(
+            "severity",
+            1
+        )
+
+        location = event.get(
+            "location",
+            "Unknown"
+        )
+
+        disaster = event.get(
+            "disaster",
+            event.get(
+                "disaster_type",
+                "Unknown Disaster"
+            )
         )
 
         self.set_confidence(
@@ -62,83 +76,124 @@ class MedicalAgent(BaseAgent):
             []
         )
 
-        historical_count = len(
-            historical_context
-        )
-
-        # ----------------------------------------------------
-        # Previous victim counts
-        # ----------------------------------------------------
-
         historical_victims = []
 
         for historical in historical_context:
 
-            previous_victims = historical.get(
-                "victim_estimate"
+            value = historical.get(
+                "victims",
+                0
             )
 
-            if previous_victims is None:
-
-                previous_victims = historical.get(
-                    "victims",
-                    0
-                )
-
             if isinstance(
-                previous_victims,
+                value,
                 (int, float)
             ):
 
                 historical_victims.append(
-                    previous_victims
+                    value
                 )
-
-        # ====================================================
-        # HISTORICAL MEDICAL IMPACT
-        # ====================================================
-
-        previous_high_medical_impact = sum(
-
-            1
-
-            for historical in historical_context
-
-            if historical.get(
-                "medical_access_impact"
-            ) == "high"
-
-        )
-
-        previous_medium_medical_impact = sum(
-
-            1
-
-            for historical in historical_context
-
-            if historical.get(
-                "medical_access_impact"
-            ) == "medium"
-
-        )
-
-        # ====================================================
-        # HISTORICAL VICTIM AVERAGE
-        # ====================================================
 
         average_historical_victims = 0
 
         if historical_victims:
 
-            average_historical_victims = (
-                sum(historical_victims)
+            average_historical_victims = round(
+
+                sum(
+                    historical_victims
+                )
                 /
-                len(historical_victims)
+                len(
+                    historical_victims
+                ),
+
+                1
             )
 
+        historical_medical_risk = (
+            "low"
+        )
+
+        if average_historical_victims >= 30:
+
+            historical_medical_risk = "high"
+
+        elif average_historical_victims >= 15:
+
+            historical_medical_risk = "medium"
+
         # ====================================================
-        # RETURN ANALYSIS
+        # DETERMINE VICTIM RISK
         # ====================================================
+
+        victim_risk = "low"
+
+        if (
+            isinstance(
+                victims,
+                (int, float)
+            )
+            and victims > 50
+        ):
+
+            victim_risk = "critical"
+
+        elif (
+            isinstance(
+                victims,
+                (int, float)
+            )
+            and victims > 20
+        ):
+
+            victim_risk = "high"
+
+        elif (
+            isinstance(
+                victims,
+                (int, float)
+            )
+            and victims > 5
+        ):
+
+            victim_risk = "medium"
+
+        # ====================================================
+        # AGENT COMMUNICATION
+        # ====================================================
+
+        communication_manager = context.get(
+            "communication_manager"
+        )
+
+        if communication_manager:
+
+            if (
+                victim_risk in (
+                    "critical",
+                    "high"
+                )
+                or
+                medical_access_impact == "high"
+            ):
+
+                communication_manager.send_message(
+
+                    sender=self.name,
+
+                    receiver="ResourceAgent",
+
+                    message=(
+                        f"Medical risk is {victim_risk} "
+                        f"in {location}. "
+                        f"Victims: {victims}. "
+                        f"Medical access impact: "
+                        f"{medical_access_impact}. "
+                        f"Medical resources should "
+                        f"be prioritized."
+                    )
+                )
 
         return {
 
@@ -148,17 +203,28 @@ class MedicalAgent(BaseAgent):
             "medical_access_impact":
                 medical_access_impact,
 
-            "historical_events_considered":
-                historical_count,
+            "severity":
+                severity,
+
+            "location":
+                location,
+
+            "disaster":
+                disaster,
+
+            "victim_risk":
+                victim_risk,
+
+            "historical_medical_risk":
+                historical_medical_risk,
 
             "average_historical_victims":
                 average_historical_victims,
 
-            "previous_high_medical_impact":
-                previous_high_medical_impact,
-
-            "previous_medium_medical_impact":
-                previous_medium_medical_impact
+            "historical_count":
+                len(
+                    historical_context
+                )
         }
 
     # ========================================================
@@ -182,80 +248,83 @@ class MedicalAgent(BaseAgent):
             "medical_access_impact"
         ]
 
-        average_historical_victims = analysis.get(
-            "average_historical_victims",
-            0
-        )
+        severity = analysis[
+            "severity"
+        ]
 
-        previous_high_impact = analysis.get(
-            "previous_high_medical_impact",
-            0
-        )
+        location = analysis[
+            "location"
+        ]
 
-        # ====================================================
-        # HIGH MEDICAL ACCESS IMPACT
-        # ====================================================
+        disaster = analysis[
+            "disaster"
+        ]
 
-        if medical_impact == "high":
+        victim_risk = analysis[
+            "victim_risk"
+        ]
 
-            return (
-                "Deploy emergency medical teams "
-                "and establish alternate medical access"
-            )
-
-        # ====================================================
-        # LARGE CURRENT VICTIM COUNT
-        # ====================================================
-
-        if (
-            isinstance(victims, (int, float))
-            and victims > 20
-        ):
-
-            return (
-                "Deploy emergency medical teams "
-                "and prepare additional hospital capacity"
-            )
+        historical_medical_risk = analysis[
+            "historical_medical_risk"
+        ]
 
         # ====================================================
-        # HISTORICAL HIGH MEDICAL IMPACT
+        # CRITICAL MEDICAL RESPONSE
         # ====================================================
 
         if (
-            previous_high_impact >= 2
-            and average_historical_victims > 10
+            medical_impact == "high"
+            or victim_risk == "critical"
         ):
 
             return (
-                "Pre-position emergency medical teams "
-                "and prepare additional hospital capacity "
-                "based on historical disaster patterns"
+                f"Deploy emergency medical teams "
+                f"in {location}, establish alternate "
+                f"medical access and prepare hospitals "
+                f"for a potentially large influx of "
+                f"{disaster} casualties"
             )
 
         # ====================================================
-        # HISTORICAL VICTIM PATTERN
+        # HIGH VICTIM LOAD
+        # ====================================================
+
+        if victim_risk == "high":
+
+            return (
+                f"Deploy emergency medical teams "
+                f"and prepare nearby hospitals in "
+                f"{location} for approximately "
+                f"{victims} affected people"
+            )
+
+        # ====================================================
+        # HISTORICAL MEDICAL RISK
         # ====================================================
 
         if (
-            average_historical_victims > 20
-            and isinstance(victims, (int, float))
-            and victims > 0
+            historical_medical_risk == "high"
+            and severity >= 6
         ):
 
             return (
-                "Deploy additional medical resources "
-                "due to historically high victim levels"
+                f"Pre-position medical teams and "
+                f"supplies in {location} based on "
+                f"previous high-impact disaster patterns"
             )
 
         # ====================================================
-        # MODERATE IMPACT
+        # MEDIUM
         # ====================================================
 
-        if medical_impact == "medium":
+        if (
+            medical_impact == "medium"
+            or victim_risk == "medium"
+        ):
 
             return (
-                "Prepare local hospitals "
-                "and medical response teams"
+                f"Prepare local hospitals and "
+                f"medical response teams in {location}"
             )
 
         # ====================================================
@@ -263,7 +332,8 @@ class MedicalAgent(BaseAgent):
         # ====================================================
 
         return (
-            "Prepare local hospitals"
+            f"Maintain medical readiness in "
+            f"{location} and monitor casualty levels"
         )
 
     # ========================================================
@@ -343,7 +413,11 @@ class MedicalAgent(BaseAgent):
         )
 
         execution_time = round(
-            time.time() - start_time,
+
+            time.time()
+            -
+            start_time,
+
             3
         )
 
@@ -366,6 +440,7 @@ class MedicalAgent(BaseAgent):
 
             "reasoning":
                 reasoning
+
         }
 
         self.set_status(

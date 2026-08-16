@@ -1,15 +1,33 @@
-import { useEffect, useState, useCallback } from "react";
-import axios from "axios";
-import { connectWebSocket } from "../services/websocket";
+import {
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 
-let socket = null;
+import API from "../services/api";
+
+import {
+  connectWebSocket,
+  disconnectWebSocket,
+} from "../services/websocket";
+
+
+// ============================================================
+// INITIAL DASHBOARD STATE
+// ============================================================
 
 const INITIAL_DATA = {
+
   stats: {
+
     severity: 0,
+
     victims: 0,
+
     traffic: 0,
+
     activeAgents: 0,
+
   },
 
   agents: {},
@@ -21,16 +39,30 @@ const INITIAL_DATA = {
   communications: [],
 
   map: {
-    affectedArea: "Disaster Zone",
-    location: "Unknown",
-    latitude: null,
-    longitude: null,
+
+    affectedArea:
+      "Disaster Zone",
+
+    location:
+      "Unknown",
+
+    latitude:
+      null,
+
+    longitude:
+      null,
+
     route: [],
+
     coordinates: [],
+
     heatZones: [],
+
   },
 
-  scenario: null,
+  scenario:
+    null,
+
 };
 
 
@@ -40,405 +72,141 @@ const INITIAL_DATA = {
 
 export default function useDashboardData() {
 
-  const [dashboardData, setDashboardData] =
-    useState(INITIAL_DATA);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState(false);
+  const [
+    dashboardData,
+    setDashboardData,
+  ] = useState(
+    INITIAL_DATA
+  );
 
 
-  // ============================================================
-  // TRANSFORM BACKEND DATA
-  // ============================================================
-
-  const transformBackendData = useCallback((rawData) => {
-
-    if (!rawData) {
-
-      console.log(
-        "⏭️ Empty dashboard payload ignored"
-      );
-
-      return;
-    }
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
 
-    console.log(
-      "📦 BACKEND PAYLOAD:",
-      rawData
-    );
-
-
-    // ========================================================
-    // CASE 1
-    // DIRECT DISASTER ANALYSIS RESPONSE
-    //
-    // POST /disaster/analyze
-    // ========================================================
-
-    if (
-      rawData.success === true &&
-      rawData.event
-    ) {
-
-      console.log(
-        "🚨 REAL DISASTER EVENT RECEIVED"
-      );
-
-      transformDisasterEvent(
-        rawData.event,
-        rawData
-      );
-
-      return;
-    }
-
-
-    // ========================================================
-    // CASE 2
-    // ORCHESTRATION RESPONSE
-    // ========================================================
-
-    if (
-      rawData.event &&
-      rawData.responses
-    ) {
-
-      console.log(
-        "🤖 MULTI-AGENT DISASTER EVENT RECEIVED"
-      );
-
-      transformDisasterEvent(
-        rawData.event,
-        rawData
-      );
-
-      return;
-    }
-
-
-    // ========================================================
-    // CASE 3
-    // NESTED DATA
-    // ========================================================
-
-    if (
-      rawData.data?.event
-    ) {
-
-      console.log(
-        "📦 NESTED DISASTER EVENT RECEIVED"
-      );
-
-      transformDisasterEvent(
-        rawData.data.event,
-        rawData.data
-      );
-
-      return;
-    }
-
-
-    // ========================================================
-    // CASE 4
-    // OLD DASHBOARD DATA
-    // ========================================================
-
-    if (
-      rawData.disaster !== undefined ||
-      rawData.severity !== undefined ||
-      rawData.victims !== undefined ||
-      rawData.active_agents !== undefined
-    ) {
-
-      transformInitialDashboard(
-        rawData
-      );
-
-      return;
-    }
-
-
-    console.log(
-      "⏭️ Unknown backend payload:",
-      rawData
-    );
-
-  }, []);
+  const [
+    error,
+    setError,
+  ] = useState(false);
 
 
   // ============================================================
-  // INITIAL DASHBOARD LOAD + WEBSOCKET
+  // TRANSFORM DISASTER EVENT
   // ============================================================
 
-  useEffect(() => {
+  const transformDisasterEvent = useCallback(
+    (
+      event,
+      backendData = {}
+    ) => {
 
-    let mounted = true;
-
-
-    const initializeDashboard = async () => {
-
-      try {
-
-        const response = await axios.get(
-          "http://127.0.0.1:8000/dashboard/data"
-        );
-
+      if (!event) {
 
         console.log(
-          "📊 INITIAL DASHBOARD:",
-          response.data
+          "⏭️ No disaster event"
         );
 
-
-        if (mounted) {
-
-          transformBackendData(
-            response.data
-          );
-
-        }
-
-      } catch (err) {
-
-        console.error(
-          "❌ Dashboard API Error:",
-          err
-        );
-
-        if (mounted) {
-
-          setError(true);
-
-        }
-
-      } finally {
-
-        if (mounted) {
-
-          setLoading(false);
-
-        }
+        return;
 
       }
 
-    };
-
-
-    initializeDashboard();
-
-
-    // ========================================================
-    // WEBSOCKET
-    // ========================================================
-
-    if (!socket) {
-
-      socket = connectWebSocket(
-        (liveData) => {
-
-          console.log(
-            "📡 LIVE WEBSOCKET DATA:",
-            liveData
-          );
-
-
-          if (mounted) {
-
-            transformBackendData(
-              liveData
-            );
-
-          }
-
-        }
-      );
-
-    }
-
-
-    return () => {
-
-      mounted = false;
-
-    };
-
-  }, [transformBackendData]);
-
-
-  // ============================================================
-  // INITIAL DASHBOARD TRANSFORM
-  // ============================================================
-
-  const transformInitialDashboard = (
-    data
-  ) => {
-
-    console.log(
-      "📊 PROCESSING INITIAL DASHBOARD:",
-      data
-    );
-
-
-    setDashboardData(
-      (previous) => ({
-
-        ...previous,
-
-        stats: {
-
-          severity:
-            Number(
-              data.severity
-            ) || 0,
-
-          victims:
-            Number(
-              data.victims
-            ) || 0,
-
-          traffic:
-            typeof data.traffic === "number"
-
-              ? data.traffic
-
-              : data.traffic === "High"
-
-                ? 85
-
-                : data.traffic === "Medium"
-
-                  ? 60
-
-                  : 20,
-
-          activeAgents:
-            Number(
-              data.active_agents
-            ) || 0,
-
-        },
-
-
-        map: {
-
-          ...previous.map,
-
-          affectedArea:
-            data.disaster ||
-            "Disaster Zone",
-
-          location:
-            data.location ||
-            "Unknown",
-
-        },
-
-      })
-    );
-
-  };
-
-
-  // ============================================================
-  // REAL DISASTER EVENT TRANSFORMER
-  // ============================================================
-
-  const transformDisasterEvent = (
-    event,
-    apiData = {}
-  ) => {
-
-    if (!event) {
 
       console.log(
-        "⏭️ Disaster event missing"
+        "🚨 Transforming disaster event:",
+        event
       );
 
-      return;
-    }
+
+      // ========================================================
+      // BASIC EVENT DATA
+      // ========================================================
+
+      const severity =
+        Number(
+          event.severity ?? 0
+        );
 
 
-    console.log(
-      "🔥 PROCESSING REAL DISASTER:",
-      event
-    );
+      const victims =
+        Number(
+          event.victims ??
+          event.victim_estimate ??
+          0
+        );
 
 
-    // ========================================================
-    // AGENTS
-    // ========================================================
-
-    const agents = {};
-
-
-    const responses =
-      Array.isArray(
-        apiData.responses
-      )
-        ? apiData.responses
-        : [];
+      const traffic =
+        Number(
+          event.traffic_level ??
+          0
+        );
 
 
-    responses.forEach(
-      (agentObj) => {
+      // ========================================================
+      // LOCATION
+      // ========================================================
 
-        if (!agentObj) {
-          return;
-        }
-
-
-        // ----------------------------------------------------
-        // NORMAL FORMAT
-        // ----------------------------------------------------
-
-        if (agentObj.agent) {
-
-          const agentData =
-            agentObj.data ||
-            agentObj;
+      const latitude =
+        event.latitude ??
+        event.lat ??
+        null;
 
 
-          agents[
-            agentObj.agent
-          ] = {
-
-            ...agentData,
-
-            agent:
-              agentObj.agent,
-
-          };
-
-          return;
-        }
+      const longitude =
+        event.longitude ??
+        event.lng ??
+        null;
 
 
-        // ----------------------------------------------------
-        // CURRENT LANGGRAPH FORMAT
-        //
-        // {
-        //   EmergencyAgent: {...}
-        // }
-        // ----------------------------------------------------
+      const location =
+        event.location ??
+        "Unknown";
 
-        if (
-          typeof agentObj === "object"
-        ) {
+
+      // ========================================================
+      // BACKEND RESPONSES
+      // ========================================================
+
+      const responses =
+        backendData.responses ??
+        [];
+
+
+      // ========================================================
+      // AGENTS
+      // ========================================================
+
+      const agents = {};
+
+
+      responses.forEach(
+        (item) => {
+
+          if (!item) {
+            return;
+          }
+
 
           Object.entries(
-            agentObj
+            item
           ).forEach(
-            ([name, value]) => {
+            (
+              [
+                agentName,
+                response,
+              ]
+            ) => {
 
-              agents[name] = {
+              agents[
+                agentName
+              ] = {
 
-                ...(value || {}),
+                ...response,
 
-                agent: name,
+                name:
+                  agentName,
 
               };
 
@@ -446,385 +214,736 @@ export default function useDashboardData() {
           );
 
         }
+      );
+
+
+      // ========================================================
+      // REASONING
+      // ========================================================
+
+      const reasoning = [];
+
+
+      Object.entries(
+        agents
+      ).forEach(
+        (
+          [
+            agentName,
+            agent,
+          ]
+        ) => {
+
+          if (
+            agent?.reasoning
+          ) {
+
+            reasoning.push({
+
+              agent:
+                agentName,
+
+              reasoning:
+                agent.reasoning,
+
+            });
+
+          }
+
+        }
+      );
+
+
+      // ========================================================
+      // ROUTE
+      // ========================================================
+
+      let route = [];
+
+      let coordinates = [];
+
+
+      const trafficAgent =
+        agents.TrafficAgent;
+
+
+      if (
+        trafficAgent?.traffic_response
+      ) {
+
+        route =
+          trafficAgent
+            .traffic_response
+            .best_route ??
+          [];
+
+
+        coordinates =
+          trafficAgent
+            .traffic_response
+            .route_coordinates ??
+          [];
 
       }
-    );
 
 
-    console.log(
-      "🤖 FINAL AGENTS:",
-      agents
-    );
+      // ========================================================
+      // COMMUNICATIONS
+      // ========================================================
+
+      const communications =
+        backendData.communications ??
+        backendData.messages ??
+        [];
 
 
-    // ========================================================
-    // LOGS
-    // ========================================================
+      // ========================================================
+      // LOGS
+      // ========================================================
 
-    const logs =
-      Object.values(
-        agents
-      ).map(
-        (agent) => {
-
-          const name =
-            agent?.agent ||
-            "UnknownAgent";
+      const logs = [];
 
 
-          return (
-            `${name} completed execution`
+      responses.forEach(
+        (item) => {
+
+          Object.entries(
+            item || {}
+          ).forEach(
+            (
+              [
+                agentName,
+                response,
+              ]
+            ) => {
+
+              logs.push({
+
+                agent:
+                  agentName,
+
+                status:
+                  response?.status ??
+                  "UNKNOWN",
+
+                decision:
+                  response?.decision ??
+                  response
+                    ?.traffic_response
+                    ?.route_status ??
+                  "No decision",
+
+                timestamp:
+                  new Date().toISOString(),
+
+              });
+
+            }
           );
 
         }
       );
 
 
-    // ========================================================
-    // REASONING
-    // ========================================================
+      // ========================================================
+      // ACTIVE AGENTS
+      // ========================================================
 
-    const reasoning =
-      Object.values(
-        agents
-      ).map(
-        (agent) => ({
+      const activeAgents =
+        Object.keys(
+          agents
+        ).length;
 
-          agent:
-            agent?.agent ||
-            "UnknownAgent",
 
-          reasoning:
-            agent?.reasoning ||
-            "No reasoning available",
+      // ========================================================
+      // MAP DATA
+      // ========================================================
+
+      const map = {
+
+        affectedArea:
+          event.disaster ??
+          event.disaster_type ??
+          "Disaster Zone",
+
+        location,
+
+        latitude,
+
+        longitude,
+
+        route,
+
+        coordinates,
+
+        heatZones:
+          backendData.heatZones ??
+          [],
+
+      };
+
+
+      // ========================================================
+      // SCENARIO
+      // ========================================================
+
+      const scenario =
+        backendData.scenario ??
+        event.scenario ??
+        null;
+
+
+      // ========================================================
+      // FINAL DASHBOARD DATA
+      // ========================================================
+
+      setDashboardData(
+        (
+          previous
+        ) => ({
+
+          ...previous,
+
+          stats: {
+
+            severity,
+
+            victims,
+
+            traffic,
+
+            activeAgents,
+
+          },
+
+          agents,
+
+          logs,
+
+          reasoning,
+
+          communications,
+
+          map,
+
+          scenario,
 
         })
       );
 
 
-    // ========================================================
-    // TRAFFIC AGENT
-    // ========================================================
+      console.log(
+        "📊 DASHBOARD UPDATED:",
+        {
 
-    const trafficAgent =
-      agents["TrafficAgent"];
+          severity,
 
+          victims,
 
-    const routeCoords =
-      trafficAgent
-        ?.traffic_response
-        ?.route_coordinates ||
-      [];
+          traffic,
 
+          activeAgents,
 
-    const bestRoute =
-      trafficAgent
-        ?.traffic_response
-        ?.best_route ||
-      [];
+          agents,
 
-
-    console.log(
-      "🚦 TRAFFIC AGENT:",
-      trafficAgent
-    );
-
-
-    console.log(
-      "🛣️ ROUTE COORDINATES:",
-      routeCoords
-    );
-
-
-    // ========================================================
-    // REAL COORDINATES
-    // ========================================================
-
-    const latitude =
-      Number(
-        event.latitude ??
-        event.lat
+        }
       );
 
-
-    const longitude =
-      Number(
-        event.longitude ??
-        event.lng
-      );
+    },
+    []
+  );
 
 
-    // ========================================================
-    // SEVERITY
-    // ========================================================
+  // ============================================================
+  // OLD DASHBOARD DATA FORMAT
+  // ============================================================
 
-    const severity =
-      Number(
-        event.severity
-      ) || 0;
+  const transformInitialDashboard =
+    useCallback(
+      (
+        rawData
+      ) => {
 
-
-    // ========================================================
-    // VICTIMS
-    //
-    // IMPORTANT:
-    // victim_estimate can legitimately be null.
-    // We should NOT convert null into a fake victim count.
-    // ========================================================
-
-    const victimValue =
-      event.victim_estimate;
+        console.log(
+          "📊 Transforming legacy dashboard data:",
+          rawData
+        );
 
 
-    const victims =
-      typeof victimValue === "number"
-        ? victimValue
-        : (
-            typeof event.victims === "number"
-              ? event.victims
-              : 0
+        const severity =
+          Number(
+            rawData.severity ??
+            0
           );
 
 
-    // ========================================================
-    // TRAFFIC
-    // ========================================================
+        const victims =
+          Number(
+            rawData.victims ??
+            rawData.victim_estimate ??
+            0
+          );
 
-    let traffic =
-      Number(
-        event.traffic_level
+
+        const traffic =
+          Number(
+            rawData.traffic_level ??
+            rawData.traffic ??
+            0
+          );
+
+
+        const latitude =
+          rawData.latitude ??
+          rawData.lat ??
+          null;
+
+
+        const longitude =
+          rawData.longitude ??
+          rawData.lng ??
+          null;
+
+
+        const location =
+          rawData.location ??
+          "Unknown";
+
+
+        setDashboardData(
+          (
+            previous
+          ) => ({
+
+            ...previous,
+
+            stats: {
+
+              severity,
+
+              victims,
+
+              traffic,
+
+              activeAgents:
+                Number(
+                  rawData.active_agents ??
+                  0
+                ),
+
+            },
+
+            map: {
+
+              ...previous.map,
+
+              location,
+
+              latitude,
+
+              longitude,
+
+            },
+
+            scenario:
+              rawData.scenario ??
+              null,
+
+          })
+        );
+
+      },
+      []
+    );
+
+
+  // ============================================================
+  // BACKEND PAYLOAD TRANSFORMATION
+  // ============================================================
+
+  const transformBackendData =
+    useCallback(
+      (
+        rawData
+      ) => {
+
+        if (!rawData) {
+
+          console.log(
+            "⏭️ Empty dashboard payload ignored"
+          );
+
+          return;
+
+        }
+
+
+        console.log(
+          "📦 BACKEND PAYLOAD:",
+          rawData
+        );
+
+
+        // ======================================================
+        // CASE 1
+        // DIRECT DISASTER ANALYSIS RESPONSE
+        //
+        // Example:
+        //
+        // {
+        //   success: true,
+        //   event: {...},
+        //   responses: [...]
+        // }
+        // ======================================================
+
+        if (
+          rawData.success === true &&
+          rawData.event
+        ) {
+
+          console.log(
+            "🚨 REAL DISASTER EVENT RECEIVED"
+          );
+
+
+          transformDisasterEvent(
+            rawData.event,
+            rawData
+          );
+
+
+          return;
+
+        }
+
+
+        // ======================================================
+        // CASE 2
+        // LANGGRAPH ORCHESTRATION RESPONSE
+        // ======================================================
+
+        if (
+          rawData.event &&
+          rawData.responses
+        ) {
+
+          console.log(
+            "🤖 MULTI-AGENT DISASTER EVENT RECEIVED"
+          );
+
+
+          transformDisasterEvent(
+            rawData.event,
+            rawData
+          );
+
+
+          return;
+
+        }
+
+
+        // ======================================================
+        // CASE 3
+        // NESTED DATA
+        // ======================================================
+
+        if (
+          rawData.data?.event
+        ) {
+
+          console.log(
+            "📦 NESTED DISASTER EVENT RECEIVED"
+          );
+
+
+          transformDisasterEvent(
+            rawData.data.event,
+            rawData.data
+          );
+
+
+          return;
+
+        }
+
+
+        // ======================================================
+        // CASE 4
+        // WEBSOCKET DASHBOARD MESSAGE
+        // ======================================================
+
+        if (
+          rawData.type ===
+            "disaster" &&
+          rawData.event
+        ) {
+
+          console.log(
+            "📡 WEBSOCKET DISASTER EVENT"
+          );
+
+
+          transformDisasterEvent(
+            rawData.event,
+            rawData
+          );
+
+
+          return;
+
+        }
+
+
+        // ======================================================
+        // CASE 5
+        // OLD DASHBOARD DATA
+        // ======================================================
+
+        if (
+
+          rawData.disaster !==
+            undefined ||
+
+          rawData.disaster_type !==
+            undefined ||
+
+          rawData.severity !==
+            undefined ||
+
+          rawData.victims !==
+            undefined ||
+
+          rawData.active_agents !==
+            undefined
+
+        ) {
+
+          transformInitialDashboard(
+            rawData
+          );
+
+
+          return;
+
+        }
+
+
+        // ======================================================
+        // UNKNOWN PAYLOAD
+        // ======================================================
+
+        console.log(
+          "⏭️ Unknown backend payload:",
+          rawData
+        );
+
+      },
+      [
+        transformDisasterEvent,
+        transformInitialDashboard,
+      ]
+    );
+
+
+  // ============================================================
+  // INITIAL DASHBOARD LOAD + WEBSOCKET
+  // ============================================================
+
+  useEffect(
+    () => {
+
+      let mounted = true;
+
+
+      // ========================================================
+      // INITIAL REST API REQUEST
+      // ========================================================
+
+      const initializeDashboard =
+        async () => {
+
+          try {
+
+            setLoading(true);
+
+            setError(false);
+
+
+            console.log(
+              "📡 Loading initial dashboard..."
+            );
+
+
+            const response =
+              await API.get(
+                "/dashboard/data"
+              );
+
+
+            console.log(
+              "📊 INITIAL DASHBOARD:",
+              response.data
+            );
+
+
+            if (mounted) {
+
+              transformBackendData(
+                response.data
+              );
+
+            }
+
+          }
+          catch (
+            requestError
+          ) {
+
+            console.error(
+              "❌ Dashboard initialization error:",
+              requestError
+            );
+
+
+            if (mounted) {
+
+              setError(true);
+
+            }
+
+          }
+          finally {
+
+            if (mounted) {
+
+              setLoading(false);
+
+            }
+
+          }
+
+        };
+
+
+      // ========================================================
+      // LOAD DASHBOARD
+      // ========================================================
+
+      initializeDashboard();
+
+
+      // ========================================================
+      // WEBSOCKET
+      // ========================================================
+
+      console.log(
+        "🔌 Initializing dashboard WebSocket..."
       );
 
 
-    if (
-      Number.isNaN(traffic)
-    ) {
+      connectWebSocket({
 
-      const impact =
-        event.traffic_impact;
+        // ------------------------------------------------------
+        // CONNECTED
+        // ------------------------------------------------------
 
+        onOpen:
+          () => {
 
-      if (impact === "high") {
+            console.log(
+              "🟢 Dashboard WebSocket connected"
+            );
 
-        traffic = 85;
-
-      } else if (
-        impact === "medium"
-      ) {
-
-        traffic = 60;
-
-      } else {
-
-        traffic = 20;
-
-      }
-
-    }
+          },
 
 
-    // ========================================================
-    // COMMUNICATIONS
-    // ========================================================
+        // ------------------------------------------------------
+        // MESSAGE
+        // ------------------------------------------------------
 
-    const communications = [];
+        onMessage:
+          (
+            data
+          ) => {
 
-
-    // Traffic → Resource
-
-    if (traffic >= 70) {
-
-      communications.push({
-
-        from:
-          "TrafficAgent",
-
-        to:
-          "ResourceAgent",
-
-        message:
-          `Heavy traffic detected near ${
-            event.location ||
-            "disaster zone"
-          }. Alternate emergency routing recommended.`,
-
-      });
-
-    }
+            console.log(
+              "📡 Dashboard WebSocket data:",
+              data
+            );
 
 
-    // Medical → Resource
+            if (!mounted) {
 
-    if (
-      event.medical_access_impact ===
-      "high"
-    ) {
+              return;
 
-      communications.push({
-
-        from:
-          "MedicalAgent",
-
-        to:
-          "ResourceAgent",
-
-        message:
-          "Medical access is severely affected. Alternate medical access is required.",
-
-      });
-
-    }
+            }
 
 
-    // ========================================================
-    // HEAT ZONE
-    //
-    // Only create a real heat point when we have
-    // actual geocoded coordinates.
-    // ========================================================
+            transformBackendData(
+              data
+            );
 
-    const heatZones = [];
+          },
 
 
-    if (
-      Number.isFinite(latitude) &&
-      Number.isFinite(longitude)
-    ) {
+        // ------------------------------------------------------
+        // ERROR
+        // ------------------------------------------------------
 
-      heatZones.push({
+        onError:
+          (
+            websocketError
+          ) => {
 
-        lat:
-          latitude,
+            console.error(
+              "❌ Dashboard WebSocket error:",
+              websocketError
+            );
 
-        lng:
-          longitude,
+          },
 
-        intensity:
-          severity,
+
+        // ------------------------------------------------------
+        // CLOSED
+        // ------------------------------------------------------
+
+        onClose:
+          () => {
+
+            console.log(
+              "🔴 Dashboard WebSocket closed"
+            );
+
+          },
 
       });
 
-    }
+
+      // ========================================================
+      // CLEANUP
+      // ========================================================
+
+      return () => {
+
+        mounted = false;
 
 
-    // ========================================================
-    // FINAL DASHBOARD OBJECT
-    // ========================================================
-
-    const transformed = {
-
-      stats: {
-
-        severity,
-
-        victims,
-
-        traffic,
-
-        activeAgents:
-          Object.keys(
-            agents
-          ).length,
-
-      },
+        console.log(
+          "🧹 Cleaning dashboard connection..."
+        );
 
 
-      agents,
+        disconnectWebSocket();
 
+      };
 
-      logs,
-
-
-      reasoning,
-
-
-      communications,
-
-
-      map: {
-
-        affectedArea:
-          event.disaster_type ||
-          event.disaster ||
-          "Disaster Zone",
-
-        location:
-          event.location ||
-          "Unknown",
-
-        latitude:
-          Number.isFinite(latitude)
-            ? latitude
-            : null,
-
-        longitude:
-          Number.isFinite(longitude)
-            ? longitude
-            : null,
-
-        route:
-          bestRoute,
-
-        coordinates:
-          routeCoords,
-
-        heatZones,
-
-      },
-
-
-      // ======================================================
-      // REAL EVENT
-      // ======================================================
-
-      scenario: {
-
-        id:
-          event.event_id ||
-          event.scenario_id ||
-          null,
-
-        name:
-          event.disaster_type ||
-          event.disaster ||
-          "Real-World Disaster",
-
-        disaster:
-          event.disaster_type ||
-          event.disaster ||
-          "Unknown Disaster",
-
-        location:
-          event.location ||
-          "Unknown",
-
-        severity,
-
-        victims,
-
-        confidence:
-          event.confidence || 0,
-
-        evacuation_required:
-          event.evacuation_required ||
-          false,
-
-      },
-
-    };
-
-
-    console.log(
-      "✅ UPDATED REAL-WORLD DASHBOARD:",
-      transformed
-    );
-
-
-    setDashboardData(
-      transformed
-    );
-
-  };
+    },
+    [
+      transformBackendData,
+    ]
+  );
 
 
   // ============================================================

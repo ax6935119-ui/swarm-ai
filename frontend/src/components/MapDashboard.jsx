@@ -1,133 +1,169 @@
 import {
   useEffect,
   useRef,
-  useState,
+  useCallback,
 } from "react";
 
 import maplibregl from "maplibre-gl";
-
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import API from "../services/api"; // use configured backend URL
-
-
 export default function MapDashboard({ data }) {
-
   const mapContainer = useRef(null);
-
   const mapRef = useRef(null);
 
+  const mapLoadedRef = useRef(false);
+
   const disasterMarkerRef = useRef(null);
+  const routeMarkersRef = useRef([]);
 
   const ambulanceRef = useRef(null);
-
   const ambulanceIntervalRef = useRef(null);
 
+  const routeDataRef = useRef(null);
 
   const MAPTILER_KEY =
     import.meta.env.VITE_MAPTILER_KEY;
 
-// State to handle missing key & loading UI
-const [mapError, setMapError] = useState(false);
-const [isMapLoading, setIsMapLoading] = useState(true);
+  // =========================================================
+  // DEFAULT LOCATION
+  // =========================================================
 
+  const DEFAULT_CENTER = [
+    73.8567,
+    18.5204,
+  ];
+
+  // =========================================================
+  // GET VALID COORDINATES
+  // =========================================================
+
+  const getScenarioCoordinates = useCallback(() => {
+    const latitude = Number(
+      data?.map?.latitude ??
+      data?.scenario?.latitude ??
+      data?.event?.latitude ??
+      data?.event?.lat
+    );
+
+    const longitude = Number(
+      data?.map?.longitude ??
+      data?.scenario?.longitude ??
+      data?.event?.longitude ??
+      data?.event?.lng
+    );
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude)
+    ) {
+      return null;
+    }
+
+    return {
+      latitude,
+      longitude,
+    };
+  }, [data]);
 
   // =========================================================
   // INITIALIZE MAP
   // =========================================================
 
   useEffect(() => {
-
     if (
-      mapRef.current ||
-      !mapContainer.current
+      !mapContainer.current ||
+      mapRef.current
     ) {
       return;
     }
 
+    console.log(
+      "🗺️ Initializing MapLibre..."
+    );
 
     if (!MAPTILER_KEY) {
-  console.error("❌ VITE_MAPTILER_KEY is missing");
-  setMapError(true);
-  return;
-}
+      console.error(
+        "❌ VITE_MAPTILER_KEY is missing."
+      );
 
+      return;
+    }
 
     const map =
       new maplibregl.Map({
-
         container:
           mapContainer.current,
 
         style:
           `https://api.maptiler.com/maps/dataviz-dark/style.json?key=${MAPTILER_KEY}`,
 
-        center: [
-          73.8567,
-          18.5204
-        ],
+        center:
+          DEFAULT_CENTER,
 
-        zoom: 11
+        zoom:
+          11,
 
+        attributionControl:
+          true,
       });
-
 
     mapRef.current = map;
 
+    // =======================================================
+    // CONTROLS
+    // =======================================================
 
     map.addControl(
       new maplibregl.NavigationControl(),
       "top-right"
     );
 
+    // =======================================================
+    // MAP LOAD
+    // =======================================================
 
     map.on("load", () => {
+      console.log(
+        "🗺️ MapLibre map loaded"
+      );
 
-  console.log("🗺️ MapLibre map loaded");
-  setIsMapLoading(false);
+      mapLoadedRef.current = true;
 
-      // =====================================================
+      // -----------------------------------------------------
       // DANGER ZONE SOURCE
-      // =====================================================
+      // -----------------------------------------------------
 
       if (
-        !map.getSource("danger-zone")
+        !map.getSource(
+          "danger-zone"
+        )
       ) {
-
         map.addSource(
           "danger-zone",
           {
-
             type:
               "geojson",
 
             data: {
-
               type:
                 "FeatureCollection",
 
-              features: []
-
-            }
-
+              features: [],
+            },
           }
         );
-
       }
 
-
-      // =====================================================
+      // -----------------------------------------------------
       // DANGER ZONE FILL
-      // =====================================================
+      // -----------------------------------------------------
 
       if (
         !map.getLayer(
           "danger-zone-layer"
         )
       ) {
-
         map.addLayer({
-
           id:
             "danger-zone-layer",
 
@@ -139,29 +175,24 @@ const [isMapLoading, setIsMapLoading] = useState(true);
 
           paint: {
             "fill-color":
-              "#ff3b30",
+              "#ff3030",
+
             "fill-opacity":
-              0.20,
-            "fill-opacity-transition": { "duration": 500 }
-          }
-
+              0.18,
+          },
         });
-
       }
 
-
-      // =====================================================
+      // -----------------------------------------------------
       // DANGER ZONE BORDER
-      // =====================================================
+      // -----------------------------------------------------
 
       if (
         !map.getLayer(
           "danger-zone-border"
         )
       ) {
-
         map.addLayer({
-
           id:
             "danger-zone-border",
 
@@ -172,775 +203,1135 @@ const [isMapLoading, setIsMapLoading] = useState(true);
             "danger-zone",
 
           paint: {
-
             "line-color":
-              "#ff3b30",
+              "#ff3030",
 
             "line-width":
               3,
 
             "line-opacity":
-              0.9
-
-          }
-
+              0.9,
+          },
         });
-
       }
 
+      // -----------------------------------------------------
+      // DRAW EXISTING DATA
+      // -----------------------------------------------------
+
+      updateMap();
     });
 
+    // =======================================================
+    // MAP ERROR
+    // =======================================================
 
-  }, [MAPTILER_KEY]);
-
-
-  // =========================================================
-  // UPDATE DISASTER LOCATION
-  // =========================================================
-
-  useEffect(() => {
-
-    const map =
-      mapRef.current;
-
-
-    if (!map) {
-      return;
-    }
-
-
-    const latitude =
-      Number(
-        data?.map?.latitude
+    map.on("error", (event) => {
+      console.error(
+        "❌ MapLibre error:",
+        event
       );
-
-
-    const longitude =
-      Number(
-        data?.map?.longitude
-      );
-
-
-    console.log(
-      "📍 MAP COORDINATES:",
-      {
-        latitude,
-        longitude
-      }
-    );
-
-
-    // =======================================================
-    // INVALID COORDINATES
-    // =======================================================
-
-    if (
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude)
-    ) {
-
-      console.log(
-        "⏳ Waiting for real disaster coordinates..."
-      );
-
-      return;
-    }
-
-
-    console.log(
-      "🌍 Moving map to:",
-      latitude,
-      longitude
-    );
-
-
-    // =======================================================
-    // MOVE MAP
-    // =======================================================
-
-    map.flyTo({
-
-      center: [
-        longitude,
-        latitude
-      ],
-
-      zoom: 12,
-
-      duration: 1800,
-
-      essential: true
-
     });
 
-
     // =======================================================
-    // DISASTER MARKER
-    // =======================================================
-
-    if (
-      disasterMarkerRef.current
-    ) {
-
-      disasterMarkerRef.current
-        .setLngLat([
-          longitude,
-          latitude
-        ]);
-
-    }
-
-    else {
-
-      const element =
-        document.createElement(
-          "div"
-        );
-
-
-      element.style.width =
-        "32px";
-
-      element.style.height =
-        "32px";
-
-      element.style.borderRadius =
-        "50%";
-
-      element.style.background =
-        "rgba(255,40,40,0.9)";
-
-      element.style.border =
-        "3px solid white";
-
-      element.style.boxShadow =
-        "0 0 35px rgba(255,0,0,0.9)";
-
-
-      disasterMarkerRef.current =
-        new maplibregl.Marker({
-
-          element
-
-        })
-
-          .setLngLat([
-            longitude,
-            latitude
-          ])
-
-          .setPopup(
-
-            (() => {
-  const container = document.createElement("div");
-  container.style.fontFamily = "Arial";
-  container.style.padding = "6px";
-
-  const title = document.createElement("strong");
-  title.textContent = "🚨 Disaster Zone";
-  container.appendChild(title);
-  container.appendChild(document.createElement("br"));
-
-  const name = document.createElement("span");
-  name.textContent = data?.scenario?.name || data?.map?.affectedArea || "Active Disaster";
-  container.appendChild(name);
-  container.appendChild(document.createElement("br"));
-
-  const loc = document.createElement("span");
-  loc.textContent = data?.scenario?.location || data?.map?.location || "Unknown location";
-  container.appendChild(loc);
-  container.appendChild(document.createElement("br"));
-
-  const severity = document.createElement("span");
-  severity.textContent = `Severity: ${data?.stats?.severity ?? 0}/10`;
-  container.appendChild(severity);
-
-  return new maplibregl.Popup().setDOMContent(container);
-})()
-
-          )
-
-          .addTo(map);
-
-    }
-
-
-    // =======================================================
-    // DANGER ZONE
+    // CLEANUP
     // =======================================================
 
-    if (
-      !map.isStyleLoaded() ||
-      !map.getSource("danger-zone")
-    ) {
-
-      return;
-    }
-
-
-    const offset =
-      0.025;
-
-
-    const polygon = {
-  type: "FeatureCollection",
-  features: [{
-    type: "Feature",
-    geometry: {
-      type: "Polygon",
-      coordinates: [[
-        [longitude - offset, latitude + offset],
-        [longitude + offset, latitude + offset],
-        [longitude + offset, latitude - offset],
-        [longitude - offset, latitude - offset],
-        [longitude - offset, latitude + offset]
-      ]]
-    }
-  }]
-};
-// Apply a subtle fade‑in for the danger zone after data is set
-map.getSource("danger-zone").setData(polygon);
-setTimeout(() => {
-  map.setPaintProperty("danger-zone-layer", "fill-opacity", 0.2);
-}, 200);
-
-
-  }, [
-
-    data?.map?.latitude,
-
-    data?.map?.longitude,
-
-    data?.scenario?.name,
-
-    data?.scenario?.location,
-
-    data?.stats?.severity
-
-  ]);
-
-
-  // =========================================================
-  // ROUTE
-  // =========================================================
-
-  useEffect(() => {
-
-    const coords =
-      data?.map?.coordinates;
-
-
-    console.log(
-      "🗺️ MAP DATA:",
-      data
-    );
-
-
-    console.log(
-      "📍 ROUTE COORDINATES:",
-      coords
-    );
-
-
-    if (
-      !Array.isArray(coords) ||
-      coords.length < 2
-    ) {
-
+    return () => {
       console.log(
-        "⏳ Waiting for TrafficAgent route..."
+        "🧹 Cleaning MapLibre..."
       );
 
-      return;
-    }
-
-
-    console.log(
-      "🚦 REAL TRAFFIC ROUTE RECEIVED"
-    );
-
-
-    drawAgentRoute(
-      coords
-    );
-
-
-  }, [
-    data?.map?.coordinates
-  ]);
-
-
-  // =========================================================
-  // DRAW TRAFFIC AGENT ROUTE
-  // =========================================================
-
-  const drawAgentRoute =
-    async (coords) => {
-
-      const map =
-        mapRef.current;
-
-
-      if (!map) {
-        return;
-      }
-
-
-      console.log(
-        "🚦 Drawing route from TrafficAgent"
-      );
-
-
-      const formatted =
-        coords
-          .map(
-            (point) => [
-
-              Number(point.lng),
-
-              Number(point.lat)
-
-            ]
-          )
-          .filter(
-            ([lng, lat]) =>
-              Number.isFinite(lng) &&
-              Number.isFinite(lat)
-          );
-
-
-      if (
-        formatted.length < 2
-      ) {
-
-        console.log(
-          "⚠️ Invalid route coordinates"
-        );
-
-        return;
-      }
-
-
-      try {
-  const response = await API.post("/route", { coordinates: formatted });
-  const geojson = response.data;
-  drawRoute(geojson, coords);
-} catch (error) {
-  console.error("❌ Route API Error:", error);
-}
-
-    };
-
-
-  // =========================================================
-  // DRAW ORS ROUTE
-  // =========================================================
-
-  const drawRoute =
-    (
-      geojson,
-      coords
-    ) => {
-
-      const map =
-        mapRef.current;
-
-
-      if (!map) {
-        return;
-      }
-
-
-      if (
-        !geojson?.features?.length
-      ) {
-
-        console.log(
-          "⚠️ ORS returned no route"
-        );
-
-        return;
-      }
-
-
-      // =====================================================
-      // REMOVE OLD ROUTE
-      // =====================================================
-
-      if (
-        map.getLayer("route")
-      ) {
-
-        map.removeLayer(
-          "route"
-        );
-
-      }
-
-
-      if (
-        map.getSource("route")
-      ) {
-
-        map.removeSource(
-          "route"
-        );
-
-      }
-
-
-      // =====================================================
-      // ADD ROUTE
-      // =====================================================
-
-      map.addSource(
-        "route",
-        {
-
-          type:
-            "geojson",
-
-          data:
-            geojson
-
-        }
-      );
-
-
-      map.addLayer({
-
-        id:
-          "route",
-
-        type:
-          "line",
-
-        source:
-          "route",
-
-        layout: {
-
-          "line-cap":
-            "round",
-
-          "line-join":
-            "round"
-
-        },
-
-        paint: {
-
-          "line-color":
-            "#00e5ff",
-
-          "line-width":
-            6,
-
-          "line-opacity":
-            0.9
-
-        }
-
-      });
-
-
-      // =====================================================
-      // REMOVE OLD ROUTE MARKERS
-      // =====================================================
-
-      document
-        .querySelectorAll(
-          ".route-marker"
-        )
-        .forEach(
-          (element) => {
-
-            element.remove();
-
-          }
-        );
-
-
-      // =====================================================
-      // ADD ROUTE POINTS
-      // =====================================================
-
-      coords.forEach(
-        (point) => {
-
-          const markerEl =
-            document.createElement(
-              "div"
-            );
-
-
-          markerEl.className =
-            "route-marker";
-
-
-          markerEl.style.width =
-            "16px";
-
-          markerEl.style.height =
-            "16px";
-
-          markerEl.style.borderRadius =
-            "50%";
-
-          markerEl.style.background =
-            "#00e5ff";
-
-          markerEl.style.border =
-            "2px solid white";
-
-          markerEl.style.boxShadow =
-            "0 0 12px rgba(0,229,255,0.9)";
-
-
-          (() => {
-  const el = markerEl; // already styled element
-  const popup = (() => {
-    const p = document.createElement("div");
-    const strong = document.createElement("strong");
-    strong.textContent = point.zone || "Route Point";
-    p.appendChild(strong);
-    return new maplibregl.Popup().setDOMContent(p);
-  })();
-
-  return new maplibregl.Marker(el)
-    .setLngLat([Number(point.lng), Number(point.lat)])
-    .setPopup(popup)
-    .addTo(map);
-})();
-
-        }
-      );
-
-
-      // =====================================================
-      // AMBULANCE
-      // =====================================================
-
-      animateAmbulance(
-        geojson
-      );
-
-    };
-
-
-  // =========================================================
-  // AMBULANCE
-  // =========================================================
-
-  const animateAmbulance =
-    (geojson) => {
-
-      const map =
-        mapRef.current;
-
-
-      const geometry =
-        geojson
-          ?.features?.[0]
-          ?.geometry;
-
-
-      if (
-        !map ||
-        !geometry ||
-        !Array.isArray(
-          geometry.coordinates
-        )
-      ) {
-
-        return;
-      }
-
-
-      const routeCoordinates =
-        geometry.coordinates;
-
-
-      // Stop previous animation
+      mapLoadedRef.current =
+        false;
 
       if (
         ambulanceIntervalRef.current
       ) {
-
         clearInterval(
           ambulanceIntervalRef.current
         );
 
+        ambulanceIntervalRef.current =
+          null;
       }
-
-
-      // Remove old ambulance
 
       if (
         ambulanceRef.current
       ) {
-
         ambulanceRef.current.remove();
 
+        ambulanceRef.current =
+          null;
       }
 
+      routeMarkersRef.current.forEach(
+        (marker) => {
+          marker.remove();
+        }
+      );
 
-      // =====================================================
-      // AMBULANCE
-      // =====================================================
-
-      const ambulanceEl =
-        document.createElement(
-          "div"
-        );
-
-
-      ambulanceEl.textContent = "🚑";
-
-
-      ambulanceEl.style.fontSize =
-        "30px";
-
-      ambulanceEl.style.filter =
-        "drop-shadow(0 0 8px rgba(255,255,255,0.9))";
-
-
-      ambulanceRef.current =
-        new maplibregl.Marker({
-
-          element:
-            ambulanceEl
-
-        })
-
-          .setLngLat(
-            routeCoordinates[0]
-          )
-
-          .addTo(map);
-
-
-      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  let index = 0;
-  ambulanceIntervalRef.current = setInterval(() => {
-    if (index >= routeCoordinates.length) {
-      clearInterval(ambulanceIntervalRef.current);
-      return;
-    }
-    ambulanceRef.current?.setLngLat(routeCoordinates[index]);
-    index++;
-  }, 100);
-} else {
-  // Reduced motion: place ambulance at final position without animation
-  ambulanceRef.current?.setLngLat(routeCoordinates[routeCoordinates.length - 1]);
-}
-
-    };
-
-
-  // =========================================================
-  // CLEANUP
-  // =========================================================
-
-  useEffect(() => {
-
-    return () => {
-
-      if (
-        ambulanceIntervalRef.current
-      ) {
-
-        clearInterval(
-          ambulanceIntervalRef.current
-        );
-
-      }
-
+      routeMarkersRef.current = [];
 
       if (
         disasterMarkerRef.current
       ) {
-
         disasterMarkerRef.current.remove();
 
-        disasterMarkerRef.current = null;
-
+        disasterMarkerRef.current =
+          null;
       }
 
+      map.remove();
 
-      if (
-        ambulanceRef.current
-      ) {
-
-        ambulanceRef.current.remove();
-
-        ambulanceRef.current = null;
-
-      }
-
-
-      if (
-        mapRef.current
-      ) {
-
-        mapRef.current.remove();
-
-        mapRef.current = null;
-
-      }
-
+      mapRef.current =
+        null;
     };
-
   }, []);
 
+  // =========================================================
+  // UPDATE MAP
+  // =========================================================
+
+  const updateMap =
+    useCallback(() => {
+      const map =
+        mapRef.current;
+
+      if (
+        !map ||
+        !mapLoadedRef.current
+      ) {
+        console.log(
+          "⏳ Map not ready yet"
+        );
+
+        return;
+      }
+
+      const coordinates =
+        getScenarioCoordinates();
+
+      if (!coordinates) {
+        console.log(
+          "⚠️ No valid disaster coordinates"
+        );
+
+        return;
+      }
+
+      const {
+        latitude,
+        longitude,
+      } = coordinates;
+
+      console.log(
+        "📍 Updating map:",
+        latitude,
+        longitude
+      );
+
+      // =====================================================
+      // FLY TO DISASTER
+      // =====================================================
+
+      map.flyTo({
+        center: [
+          longitude,
+          latitude,
+        ],
+
+        zoom:
+          12,
+
+        duration:
+          1500,
+
+        essential:
+          true,
+      });
+
+      // =====================================================
+      // DISASTER MARKER
+      // =====================================================
+
+      createDisasterMarker(
+        map,
+        latitude,
+        longitude
+      );
+
+      // =====================================================
+      // DANGER ZONE
+      // =====================================================
+
+      updateDangerZone(
+        map,
+        latitude,
+        longitude
+      );
+
+      // =====================================================
+      // ROUTE
+      // =====================================================
+
+      const routeCoordinates =
+        data?.map?.coordinates;
+
+      if (
+        Array.isArray(
+          routeCoordinates
+        ) &&
+        routeCoordinates.length >= 2
+      ) {
+        drawBackendRoute(
+          routeCoordinates
+        );
+      }
+    }, [
+      data,
+      getScenarioCoordinates,
+    ]);
+
+  // =========================================================
+  // UPDATE MAP WHEN DATA CHANGES
+  // =========================================================
+
+  useEffect(() => {
+    if (
+      mapLoadedRef.current
+    ) {
+      updateMap();
+    }
+  }, [
+    data,
+    updateMap,
+  ]);
+
+  // =========================================================
+  // DISASTER MARKER
+  // =========================================================
+
+  const createDisasterMarker =
+    useCallback(
+      (
+        map,
+        latitude,
+        longitude
+      ) => {
+        if (
+          disasterMarkerRef.current
+        ) {
+          disasterMarkerRef.current
+            .setLngLat([
+              longitude,
+              latitude,
+            ]);
+
+          return;
+        }
+
+        const markerElement =
+          document.createElement(
+            "div"
+          );
+
+        markerElement.style.width =
+          "34px";
+
+        markerElement.style.height =
+          "34px";
+
+        markerElement.style.borderRadius =
+          "50%";
+
+        markerElement.style.background =
+          "rgba(255, 40, 40, 0.9)";
+
+        markerElement.style.border =
+          "3px solid white";
+
+        markerElement.style.boxShadow =
+          "0 0 30px rgba(255,0,0,0.95)";
+
+        markerElement.style.position =
+          "relative";
+
+        markerElement.style.zIndex =
+          "20";
+
+        markerElement.innerHTML = `
+          <div style="
+            position:absolute;
+            inset:7px;
+            border-radius:50%;
+            background:#ffffff;
+          "></div>
+        `;
+
+        const popup =
+          new maplibregl.Popup({
+            offset:
+              20,
+          }).setHTML(`
+            <div style="
+              font-family: Arial;
+              padding: 5px;
+              color: #111;
+            ">
+              <strong>
+                🚨 DISASTER ZONE
+              </strong>
+
+              <br />
+
+              ${
+                data?.scenario?.name ||
+                data?.map?.affectedArea ||
+                "Active Disaster"
+              }
+
+              <br />
+
+              ${
+                data?.scenario?.location ||
+                data?.map?.location ||
+                "Unknown location"
+              }
+            </div>
+          `);
+
+        disasterMarkerRef.current =
+          new maplibregl.Marker({
+            element:
+              markerElement,
+          })
+            .setLngLat([
+              longitude,
+              latitude,
+            ])
+            .setPopup(
+              popup
+            )
+            .addTo(map);
+
+        console.log(
+          "🚨 Disaster marker added"
+        );
+      },
+      [data]
+    );
+
+  // =========================================================
+  // DANGER ZONE
+  // =========================================================
+
+  const updateDangerZone =
+    useCallback(
+      (
+        map,
+        latitude,
+        longitude
+      ) => {
+        const source =
+          map.getSource(
+            "danger-zone"
+          );
+
+        if (!source) {
+          return;
+        }
+
+        const offset =
+          0.025;
+
+        const polygon = {
+          type:
+            "FeatureCollection",
+
+          features: [
+            {
+              type:
+                "Feature",
+
+              geometry: {
+                type:
+                  "Polygon",
+
+                coordinates: [[
+                  [
+                    longitude -
+                      offset,
+                    latitude +
+                      offset,
+                  ],
+
+                  [
+                    longitude +
+                      offset,
+                    latitude +
+                      offset,
+                  ],
+
+                  [
+                    longitude +
+                      offset,
+                    latitude -
+                      offset,
+                  ],
+
+                  [
+                    longitude -
+                      offset,
+                    latitude -
+                      offset,
+                  ],
+
+                  [
+                    longitude -
+                      offset,
+                    latitude +
+                      offset,
+                  ],
+                ]],
+              },
+            },
+          ],
+        };
+
+        source.setData(
+          polygon
+        );
+      },
+      []
+    );
+
+  // =========================================================
+  // DRAW BACKEND ROUTE
+  // =========================================================
+
+  const drawBackendRoute =
+    useCallback(
+      async (coords) => {
+        const map =
+          mapRef.current;
+
+        if (
+          !map ||
+          !mapLoadedRef.current
+        ) {
+          return;
+        }
+
+        // ---------------------------------------------------
+        // VALIDATE COORDINATES
+        // ---------------------------------------------------
+
+        const validCoords =
+          coords.filter(
+            (point) => {
+              const lat =
+                Number(
+                  point?.lat
+                );
+
+              const lng =
+                Number(
+                  point?.lng
+                );
+
+              return (
+                Number.isFinite(
+                  lat
+                ) &&
+                Number.isFinite(
+                  lng
+                )
+              );
+            }
+          );
+
+        if (
+          validCoords.length < 2
+        ) {
+          console.warn(
+            "⚠️ Not enough route coordinates"
+          );
+
+          return;
+        }
+
+        console.log(
+          "🚦 REAL TRAFFIC ROUTE RECEIVED:",
+          validCoords
+        );
+
+        // ---------------------------------------------------
+        // REMOVE OLD MARKERS
+        // ---------------------------------------------------
+
+        routeMarkersRef.current.forEach(
+          (marker) => {
+            marker.remove();
+          }
+        );
+
+        routeMarkersRef.current =
+          [];
+
+        // ---------------------------------------------------
+        // ADD ROUTE POINT MARKERS
+        // ---------------------------------------------------
+
+        validCoords.forEach(
+          (point, index) => {
+            const markerElement =
+              document.createElement(
+                "div"
+              );
+
+            markerElement.style.width =
+              "16px";
+
+            markerElement.style.height =
+              "16px";
+
+            markerElement.style.borderRadius =
+              "50%";
+
+            markerElement.style.background =
+              index ===
+              validCoords.length - 1
+                ? "#ff3030"
+                : "#00e5ff";
+
+            markerElement.style.border =
+              "3px solid white";
+
+            markerElement.style.boxShadow =
+              "0 0 15px rgba(0,229,255,0.8)";
+
+            const marker =
+              new maplibregl.Marker({
+                element:
+                  markerElement,
+              })
+                .setLngLat([
+                  Number(
+                    point.lng
+                  ),
+                  Number(
+                    point.lat
+                  ),
+                ])
+                .setPopup(
+                  new maplibregl.Popup()
+                    .setHTML(`
+                      <strong>
+                        ${
+                          point.zone ||
+                          "Route Point"
+                        }
+                      </strong>
+                    `)
+                )
+                .addTo(map);
+
+            routeMarkersRef.current.push(
+              marker
+            );
+          }
+        );
+
+        // ---------------------------------------------------
+        // TRY BACKEND ROUTING API
+        // ---------------------------------------------------
+
+        try {
+          const formatted =
+            validCoords.map(
+              (point) => [
+                Number(
+                  point.lng
+                ),
+                Number(
+                  point.lat
+                ),
+              ]
+            );
+
+          console.log(
+            "📡 Requesting real route..."
+          );
+
+          const response =
+            await fetch(
+              `${
+                import.meta.env
+                  .VITE_BACKEND_URL ||
+                "http://127.0.0.1:8000"
+              }/route`,
+              {
+                method:
+                  "POST",
+
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                },
+
+                body:
+                  JSON.stringify({
+                    coordinates:
+                      formatted,
+                  }),
+              }
+            );
+
+          if (!response.ok) {
+            throw new Error(
+              `Route API failed: ${response.status}`
+            );
+          }
+
+          const geojson =
+            await response.json();
+
+          console.log(
+            "🌍 ROUTE RESPONSE:",
+            geojson
+          );
+
+          if (
+            geojson?.features?.length
+          ) {
+            drawRouteGeoJSON(
+              geojson
+            );
+
+            return;
+          }
+        } catch (error) {
+          console.warn(
+            "⚠️ Real routing unavailable. Using backend route coordinates.",
+            error
+          );
+        }
+
+        // ---------------------------------------------------
+        // FALLBACK ROUTE
+        // ---------------------------------------------------
+
+        drawFallbackRoute(
+          validCoords
+        );
+      },
+      []
+    );
+
+  // =========================================================
+  // DRAW GEOJSON ROUTE
+  // =========================================================
+
+  const drawRouteGeoJSON =
+    useCallback(
+      (geojson) => {
+        const map =
+          mapRef.current;
+
+        if (
+          !map ||
+          !mapLoadedRef.current
+        ) {
+          return;
+        }
+
+        // ---------------------------------------------------
+        // REMOVE OLD ROUTE
+        // ---------------------------------------------------
+
+        if (
+          map.getLayer(
+            "emergency-route"
+          )
+        ) {
+          map.removeLayer(
+            "emergency-route"
+          );
+        }
+
+        if (
+          map.getSource(
+            "emergency-route"
+          )
+        ) {
+          map.removeSource(
+            "emergency-route"
+          );
+        }
+
+        // ---------------------------------------------------
+        // ADD ROUTE
+        // ---------------------------------------------------
+
+        map.addSource(
+          "emergency-route",
+          {
+            type:
+              "geojson",
+
+            data:
+              geojson,
+          }
+        );
+
+        map.addLayer({
+          id:
+            "emergency-route",
+
+          type:
+            "line",
+
+          source:
+            "emergency-route",
+
+          layout: {
+            "line-cap":
+              "round",
+
+            "line-join":
+              "round",
+          },
+
+          paint: {
+            "line-color":
+              "#00e5ff",
+
+            "line-width":
+              6,
+
+            "line-opacity":
+              0.95,
+          },
+        });
+
+        console.log(
+          "🛣️ Route drawn successfully"
+        );
+
+        // ---------------------------------------------------
+        // AMBULANCE
+        // ---------------------------------------------------
+
+        animateAmbulance(
+          geojson
+        );
+
+        // ---------------------------------------------------
+        // FIT ROUTE
+        // ---------------------------------------------------
+
+        fitRoute(
+          geojson
+        );
+      },
+      []
+    );
+
+  // =========================================================
+  // FALLBACK ROUTE
+  // =========================================================
+
+  const drawFallbackRoute =
+    useCallback(
+      (coords) => {
+        const map =
+          mapRef.current;
+
+        if (
+          !map ||
+          !mapLoadedRef.current
+        ) {
+          return;
+        }
+
+        const coordinates =
+          coords.map(
+            (point) => [
+              Number(
+                point.lng
+              ),
+              Number(
+                point.lat
+              ),
+            ]
+          );
+
+        const geojson = {
+          type:
+            "Feature",
+
+          geometry: {
+            type:
+              "LineString",
+
+            coordinates,
+          },
+
+          properties: {},
+        };
+
+        // ---------------------------------------------------
+        // REMOVE OLD ROUTE
+        // ---------------------------------------------------
+
+        if (
+          map.getLayer(
+            "emergency-route"
+          )
+        ) {
+          map.removeLayer(
+            "emergency-route"
+          );
+        }
+
+        if (
+          map.getSource(
+            "emergency-route"
+          )
+        ) {
+          map.removeSource(
+            "emergency-route"
+          );
+        }
+
+        // ---------------------------------------------------
+        // ADD FALLBACK
+        // ---------------------------------------------------
+
+        map.addSource(
+          "emergency-route",
+          {
+            type:
+              "geojson",
+
+            data:
+              geojson,
+          }
+        );
+
+        map.addLayer({
+          id:
+            "emergency-route",
+
+          type:
+            "line",
+
+          source:
+            "emergency-route",
+
+          layout: {
+            "line-cap":
+              "round",
+
+            "line-join":
+              "round",
+          },
+
+          paint: {
+            "line-color":
+              "#00e5ff",
+
+            "line-width":
+              6,
+
+            "line-opacity":
+              0.95,
+
+            "line-dasharray":
+              [
+                1,
+                1,
+              ],
+          },
+        });
+
+        console.log(
+          "🛣️ Fallback route drawn"
+        );
+
+        animateAmbulance(
+          geojson
+        );
+
+        fitRoute(
+          geojson
+        );
+      },
+      []
+    );
+
+  // =========================================================
+  // FIT MAP TO ROUTE
+  // =========================================================
+
+  const fitRoute =
+    useCallback(
+      (geojson) => {
+        const map =
+          mapRef.current;
+
+        if (
+          !map ||
+          !geojson
+        ) {
+          return;
+        }
+
+        let coordinates = [];
+
+        const feature =
+          geojson?.features?.[0];
+
+        if (
+          feature?.geometry
+            ?.coordinates
+        ) {
+          coordinates =
+            feature.geometry.coordinates;
+        } else if (
+          geojson?.geometry
+            ?.coordinates
+        ) {
+          coordinates =
+            geojson.geometry.coordinates;
+        }
+
+        if (
+          !coordinates.length
+        ) {
+          return;
+        }
+
+        const bounds =
+          new maplibregl.LngLatBounds();
+
+        coordinates.forEach(
+          (coordinate) => {
+            if (
+              Array.isArray(
+                coordinate
+              ) &&
+              coordinate.length >= 2
+            ) {
+              bounds.extend(
+                coordinate
+              );
+            }
+          }
+        );
+
+        if (
+          !bounds.isEmpty()
+        ) {
+          map.fitBounds(
+            bounds,
+            {
+              padding:
+                80,
+
+              maxZoom:
+                14,
+
+              duration:
+                1200,
+            }
+          );
+        }
+      },
+      []
+    );
+
+  // =========================================================
+  // AMBULANCE ANIMATION
+  // =========================================================
+
+  const animateAmbulance =
+    useCallback(
+      (geojson) => {
+        const map =
+          mapRef.current;
+
+        if (
+          !map ||
+          !geojson
+        ) {
+          return;
+        }
+
+        let coordinates = [];
+
+        const feature =
+          geojson?.features?.[0];
+
+        if (
+          feature?.geometry
+            ?.coordinates
+        ) {
+          coordinates =
+            feature.geometry.coordinates;
+        } else if (
+          geojson?.geometry
+            ?.coordinates
+        ) {
+          coordinates =
+            geojson.geometry.coordinates;
+        }
+
+        if (
+          !Array.isArray(
+            coordinates
+          ) ||
+          coordinates.length === 0
+        ) {
+          return;
+        }
+
+        // ---------------------------------------------------
+        // STOP PREVIOUS
+        // ---------------------------------------------------
+
+        if (
+          ambulanceIntervalRef.current
+        ) {
+          clearInterval(
+            ambulanceIntervalRef.current
+          );
+        }
+
+        // ---------------------------------------------------
+        // REMOVE OLD
+        // ---------------------------------------------------
+
+        if (
+          ambulanceRef.current
+        ) {
+          ambulanceRef.current.remove();
+        }
+
+        // ---------------------------------------------------
+        // AMBULANCE ELEMENT
+        // ---------------------------------------------------
+
+        const ambulanceElement =
+          document.createElement(
+            "div"
+          );
+
+        ambulanceElement.innerHTML =
+          "🚑";
+
+        ambulanceElement.style.fontSize =
+          "30px";
+
+        ambulanceElement.style.lineHeight =
+          "30px";
+
+        ambulanceElement.style.filter =
+          "drop-shadow(0 0 8px rgba(255,255,255,0.9))";
+
+        ambulanceElement.style.zIndex =
+          "30";
+
+        // ---------------------------------------------------
+        // CREATE MARKER
+        // ---------------------------------------------------
+
+        ambulanceRef.current =
+          new maplibregl.Marker({
+            element:
+              ambulanceElement,
+
+            anchor:
+              "center",
+          })
+            .setLngLat(
+              coordinates[0]
+            )
+            .addTo(map);
+
+        // ---------------------------------------------------
+        // ANIMATION
+        // ---------------------------------------------------
+
+        let index = 0;
+
+        ambulanceIntervalRef.current =
+          setInterval(() => {
+            if (
+              index >=
+              coordinates.length
+            ) {
+              clearInterval(
+                ambulanceIntervalRef.current
+              );
+
+              ambulanceIntervalRef.current =
+                null;
+
+              return;
+            }
+
+            ambulanceRef.current?.setLngLat(
+              coordinates[index]
+            );
+
+            index++;
+          }, 250);
+
+        console.log(
+          "🚑 Ambulance animation started"
+        );
+      },
+      []
+    );
 
   // =========================================================
   // UI
   // =========================================================
 
   return (
-
     <div
-        className="
-          bg-slate-900
-          rounded-2xl
-          overflow-hidden
-          shadow-xl
-          border
-          border-slate-800
-          h-[550px]
-        "
-      >
-        {mapError ? (
-          <div className="p-4 text-center text-red-500">
-            Map cannot be displayed – missing MapTiler API key.
-          </div>
-        ) : (
-          <>
-            {isMapLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12" />
-              </div>
-            )}
-            <div
-              ref={mapContainer}
-              className="w-full h-[462px]"
-            />
-          </>
-        )}
-
-
-      {/* HEADER */}
+      className="
+        bg-slate-900
+        rounded-2xl
+        overflow-hidden
+        shadow-xl
+        border
+        border-slate-800
+        w-full
+        h-[600px]
+        relative
+      "
+    >
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
 
       <div
         className="
+          absolute
+          top-0
+          left-0
+          right-0
+          z-50
           p-4
+          bg-slate-950/90
+          backdrop-blur-md
           border-b
           border-slate-800
-          bg-slate-950
         "
       >
-
         <div
           className="
             flex
@@ -949,19 +1340,18 @@ setTimeout(() => {
             gap-4
           "
         >
+          {/* TITLE */}
 
           <div>
-
             <h2
               className="
-                text-2xl
+                text-xl
                 font-bold
                 text-white
               "
             >
               🌍 Live Disaster Route Map
             </h2>
-
 
             <p
               className="
@@ -970,25 +1360,19 @@ setTimeout(() => {
                 mt-1
               "
             >
-
-              {
-                data?.scenario?.name ||
+              {data?.scenario?.name ||
                 data?.map?.affectedArea ||
-                "Monitoring active disaster"
-              }
+                "Monitoring active disaster"}
 
               {" • "}
 
-              {
-                data?.scenario?.location ||
+              {data?.scenario?.location ||
                 data?.map?.location ||
-                "Waiting for location"
-              }
-
+                "Unknown location"}
             </p>
-
           </div>
 
+          {/* LIVE STATUS */}
 
           <div
             className="
@@ -1003,7 +1387,6 @@ setTimeout(() => {
               border-red-500/30
             "
           >
-
             <span
               className="
                 w-2
@@ -1023,26 +1406,23 @@ setTimeout(() => {
             >
               LIVE
             </span>
-
           </div>
-
         </div>
-
       </div>
 
-
-      {/* MAP */}
+      {/* =====================================================
+          MAP CONTAINER
+      ===================================================== */}
 
       <div
         ref={mapContainer}
         className="
+          absolute
+          inset-0
           w-full
-          h-[462px]
+          h-full
         "
       />
-
     </div>
-
   );
-
 }

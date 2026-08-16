@@ -1,154 +1,110 @@
-const getSocketUrl = () => {
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  "http://127.0.0.1:8000";
 
-    // --------------------------------------------------------
-    // Explicit WebSocket URL from .env
-    // --------------------------------------------------------
+const WS_URL =
+  BACKEND_URL
+    .replace(/^http:/, "ws:")
+    .replace(/^https:/, "wss:");
 
-    if (import.meta.env.VITE_WEBSOCKET_URL) {
+let socket = null;
+let reconnectTimer = null;
 
-        return import.meta.env.VITE_WEBSOCKET_URL;
+export function connectWebSocket({
+  onMessage,
+  onOpen,
+  onClose,
+  onError,
+} = {}) {
+  if (
+    socket &&
+    (
+      socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING
+    )
+  ) {
+    return socket;
+  }
 
+  const url = `${WS_URL}/ws/disaster`;
+
+  console.log("🔌 Connecting WebSocket:", url);
+
+  socket = new WebSocket(url);
+
+  socket.onopen = () => {
+    console.log("🟢 WebSocket connected");
+
+    if (onOpen) {
+      onOpen();
     }
+  };
 
+  socket.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
 
-    // --------------------------------------------------------
-    // Otherwise derive WebSocket URL from backend URL
-    // --------------------------------------------------------
+      console.log("📡 WebSocket message:", data);
 
-    const backendUrl =
-        import.meta.env.VITE_BACKEND_URL ||
-        "http://127.0.0.1:8000";
-
-
-    const wsUrl =
-        backendUrl.replace(
-            /^http/,
-            "ws"
-        );
-
-
-    return `${wsUrl}/ws/disaster`;
-
-};
-
-
-const SOCKET_URL =
-    getSocketUrl();
-
-
-// ============================================================
-// CONNECT WEBSOCKET
-// ============================================================
-
-export const connectWebSocket = (
-    onMessage
-) => {
-
-    if (
-        typeof onMessage !== "function"
-    ) {
-
-        throw new Error(
-            "connectWebSocket requires a callback function"
-        );
-
+      if (onMessage) {
+        onMessage(data);
+      }
+    } catch (error) {
+      console.error(
+        "❌ WebSocket JSON parse error:",
+        error
+      );
     }
+  };
 
-
-    console.log(
-        "🔌 Connecting WebSocket:",
-        SOCKET_URL
+  socket.onerror = (error) => {
+    console.error(
+      "❌ WebSocket error:",
+      error
     );
 
+    if (onError) {
+      onError(error);
+    }
+  };
 
-    const socket =
-        new WebSocket(
-            SOCKET_URL
-        );
+  socket.onclose = () => {
+    console.log(
+      "🔴 WebSocket disconnected"
+    );
 
+    socket = null;
 
-    // ========================================================
-    // OPEN
-    // ========================================================
+    if (onClose) {
+      onClose();
+    }
 
-    socket.onopen = () => {
+    // reconnect after 3 seconds
+    reconnectTimer = setTimeout(() => {
+      connectWebSocket({
+        onMessage,
+        onOpen,
+        onClose,
+        onError,
+      });
+    }, 3000);
+  };
 
-        console.log(
-            "✅ WebSocket Connected"
-        );
+  return socket;
+}
 
-    };
+export function disconnectWebSocket() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
 
+  if (socket) {
+    socket.close();
+    socket = null;
+  }
+}
 
-    // ========================================================
-    // MESSAGE
-    // ========================================================
-
-    socket.onmessage = (
-        event
-    ) => {
-
-        try {
-
-            const message =
-                JSON.parse(
-                    event.data
-                );
-
-
-            console.log(
-                "📡 WS MESSAGE:",
-                message
-            );
-
-
-            onMessage(
-                message
-            );
-
-        }
-
-        catch (error) {
-
-            console.error(
-                "❌ Invalid WebSocket message:",
-                error
-            );
-
-        }
-
-    };
-
-
-    // ========================================================
-    // ERROR
-    // ========================================================
-
-    socket.onerror = (
-        error
-    ) => {
-
-        console.error(
-            "❌ WebSocket Error:",
-            error
-        );
-
-    };
-
-
-    // ========================================================
-    // CLOSE
-    // ========================================================
-
-    socket.onclose = () => {
-
-        console.log(
-            "🔌 WebSocket Closed"
-        );
-
-    };
-
-
-    return socket;
-
-};
+export function getWebSocket() {
+  return socket;
+}
