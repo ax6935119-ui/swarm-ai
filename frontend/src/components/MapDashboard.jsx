@@ -1,11 +1,14 @@
 import {
   useEffect,
   useRef,
+  useState,
 } from "react";
 
 import maplibregl from "maplibre-gl";
 
 import "maplibre-gl/dist/maplibre-gl.css";
+
+import API from "../services/api"; // use configured backend URL
 
 
 export default function MapDashboard({ data }) {
@@ -24,6 +27,10 @@ export default function MapDashboard({ data }) {
   const MAPTILER_KEY =
     import.meta.env.VITE_MAPTILER_KEY;
 
+// State to handle missing key & loading UI
+const [mapError, setMapError] = useState(false);
+const [isMapLoading, setIsMapLoading] = useState(true);
+
 
   // =========================================================
   // INITIALIZE MAP
@@ -40,13 +47,10 @@ export default function MapDashboard({ data }) {
 
 
     if (!MAPTILER_KEY) {
-
-      console.error(
-        "❌ VITE_MAPTILER_KEY is missing"
-      );
-
-      return;
-    }
+  console.error("❌ VITE_MAPTILER_KEY is missing");
+  setMapError(true);
+  return;
+}
 
 
     const map =
@@ -79,10 +83,8 @@ export default function MapDashboard({ data }) {
 
     map.on("load", () => {
 
-      console.log(
-        "🗺️ MapLibre map loaded"
-      );
-
+  console.log("🗺️ MapLibre map loaded");
+  setIsMapLoading(false);
 
       // =====================================================
       // DANGER ZONE SOURCE
@@ -136,13 +138,11 @@ export default function MapDashboard({ data }) {
             "danger-zone",
 
           paint: {
-
             "fill-color":
               "#ff3b30",
-
             "fill-opacity":
-              0.20
-
+              0.20,
+            "fill-opacity-transition": { "duration": 500 }
           }
 
         });
@@ -331,47 +331,32 @@ export default function MapDashboard({ data }) {
 
           .setPopup(
 
-            new maplibregl.Popup()
-              .setHTML(`
+            (() => {
+  const container = document.createElement("div");
+  container.style.fontFamily = "Arial";
+  container.style.padding = "6px";
 
-                <div
-                  style="
-                    font-family: Arial;
-                    padding: 6px;
-                  "
-                >
+  const title = document.createElement("strong");
+  title.textContent = "🚨 Disaster Zone";
+  container.appendChild(title);
+  container.appendChild(document.createElement("br"));
 
-                  <strong>
-                    🚨 Disaster Zone
-                  </strong>
+  const name = document.createElement("span");
+  name.textContent = data?.scenario?.name || data?.map?.affectedArea || "Active Disaster";
+  container.appendChild(name);
+  container.appendChild(document.createElement("br"));
 
-                  <br />
+  const loc = document.createElement("span");
+  loc.textContent = data?.scenario?.location || data?.map?.location || "Unknown location";
+  container.appendChild(loc);
+  container.appendChild(document.createElement("br"));
 
-                  ${
-                    data?.scenario?.name ||
-                    data?.map?.affectedArea ||
-                    "Active Disaster"
-                  }
+  const severity = document.createElement("span");
+  severity.textContent = `Severity: ${data?.stats?.severity ?? 0}/10`;
+  container.appendChild(severity);
 
-                  <br />
-
-                  ${
-                    data?.scenario?.location ||
-                    data?.map?.location ||
-                    "Unknown location"
-                  }
-
-                  <br />
-
-                  Severity:
-                  ${
-                    data?.stats?.severity ??
-                    0
-                  }/10
-
-                </div>
-
-              `)
+  return new maplibregl.Popup().setDOMContent(container);
+})()
 
           )
 
@@ -398,67 +383,26 @@ export default function MapDashboard({ data }) {
 
 
     const polygon = {
-
-      type:
-        "FeatureCollection",
-
-      features: [
-
-        {
-
-          type:
-            "Feature",
-
-          geometry: {
-
-            type:
-              "Polygon",
-
-            coordinates: [[
-
-              [
-                longitude - offset,
-                latitude + offset
-              ],
-
-              [
-                longitude + offset,
-                latitude + offset
-              ],
-
-              [
-                longitude + offset,
-                latitude - offset
-              ],
-
-              [
-                longitude - offset,
-                latitude - offset
-              ],
-
-              [
-                longitude - offset,
-                latitude + offset
-              ]
-
-            ]]
-
-          }
-
-        }
-
-      ]
-
-    };
-
-
-    map
-      .getSource(
-        "danger-zone"
-      )
-      .setData(
-        polygon
-      );
+  type: "FeatureCollection",
+  features: [{
+    type: "Feature",
+    geometry: {
+      type: "Polygon",
+      coordinates: [[
+        [longitude - offset, latitude + offset],
+        [longitude + offset, latitude + offset],
+        [longitude + offset, latitude - offset],
+        [longitude - offset, latitude - offset],
+        [longitude - offset, latitude + offset]
+      ]]
+    }
+  }]
+};
+// Apply a subtle fade‑in for the danger zone after data is set
+map.getSource("danger-zone").setData(polygon);
+setTimeout(() => {
+  map.setPaintProperty("danger-zone-layer", "fill-opacity", 0.2);
+}, 200);
 
 
   }, [
@@ -578,67 +522,12 @@ export default function MapDashboard({ data }) {
 
 
       try {
-
-        const response =
-          await fetch(
-            "http://127.0.0.1:8000/route",
-            {
-
-              method:
-                "POST",
-
-              headers: {
-
-                "Content-Type":
-                  "application/json"
-
-              },
-
-              body:
-                JSON.stringify({
-
-                  coordinates:
-                    formatted
-
-                })
-
-            }
-          );
-
-
-        if (!response.ok) {
-
-          throw new Error(
-            `Route API failed: ${response.status}`
-          );
-
-        }
-
-
-        const geojson =
-          await response.json();
-
-
-        console.log(
-          "🌍 ORS ROUTE RESPONSE:",
-          geojson
-        );
-
-
-        drawRoute(
-          geojson,
-          coords
-        );
-
-
-      } catch (error) {
-
-        console.error(
-          "❌ Route API Error:",
-          error
-        );
-
-      }
+  const response = await API.post("/route", { coordinates: formatted });
+  const geojson = response.data;
+  drawRoute(geojson, coords);
+} catch (error) {
+  console.error("❌ Route API Error:", error);
+}
 
     };
 
@@ -808,32 +697,21 @@ export default function MapDashboard({ data }) {
             "0 0 12px rgba(0,229,255,0.9)";
 
 
-          new maplibregl.Marker(
-            markerEl
-          )
+          (() => {
+  const el = markerEl; // already styled element
+  const popup = (() => {
+    const p = document.createElement("div");
+    const strong = document.createElement("strong");
+    strong.textContent = point.zone || "Route Point";
+    p.appendChild(strong);
+    return new maplibregl.Popup().setDOMContent(p);
+  })();
 
-            .setLngLat([
-
-              Number(point.lng),
-
-              Number(point.lat)
-
-            ])
-
-            .setPopup(
-
-              new maplibregl.Popup()
-                .setHTML(`
-
-                  <strong>
-                    ${point.zone || "Route Point"}
-                  </strong>
-
-                `)
-
-            )
-
-            .addTo(map);
+  return new maplibregl.Marker(el)
+    .setLngLat([Number(point.lng), Number(point.lat)])
+    .setPopup(popup)
+    .addTo(map);
+})();
 
         }
       );
@@ -917,8 +795,7 @@ export default function MapDashboard({ data }) {
         );
 
 
-      ambulanceEl.innerHTML =
-        "🚑";
+      ambulanceEl.textContent = "🚑";
 
 
       ambulanceEl.style.fontSize =
@@ -943,37 +820,20 @@ export default function MapDashboard({ data }) {
           .addTo(map);
 
 
-      let index = 0;
-
-
-      ambulanceIntervalRef.current =
-        setInterval(
-          () => {
-
-            if (
-              index >=
-              routeCoordinates.length
-            ) {
-
-              clearInterval(
-                ambulanceIntervalRef.current
-              );
-
-              return;
-            }
-
-
-            ambulanceRef.current
-              ?.setLngLat(
-                routeCoordinates[index]
-              );
-
-
-            index++;
-
-          },
-          100
-        );
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  let index = 0;
+  ambulanceIntervalRef.current = setInterval(() => {
+    if (index >= routeCoordinates.length) {
+      clearInterval(ambulanceIntervalRef.current);
+      return;
+    }
+    ambulanceRef.current?.setLngLat(routeCoordinates[index]);
+    index++;
+  }, 100);
+} else {
+  // Reduced motion: place ambulance at final position without animation
+  ambulanceRef.current?.setLngLat(routeCoordinates[routeCoordinates.length - 1]);
+}
 
     };
 
@@ -1041,16 +901,34 @@ export default function MapDashboard({ data }) {
   return (
 
     <div
-      className="
-        bg-slate-900
-        rounded-2xl
-        overflow-hidden
-        shadow-xl
-        border
-        border-slate-800
-        h-[550px]
-      "
-    >
+        className="
+          bg-slate-900
+          rounded-2xl
+          overflow-hidden
+          shadow-xl
+          border
+          border-slate-800
+          h-[550px]
+        "
+      >
+        {mapError ? (
+          <div className="p-4 text-center text-red-500">
+            Map cannot be displayed – missing MapTiler API key.
+          </div>
+        ) : (
+          <>
+            {isMapLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12" />
+              </div>
+            )}
+            <div
+              ref={mapContainer}
+              className="w-full h-[462px]"
+            />
+          </>
+        )}
+
 
       {/* HEADER */}
 

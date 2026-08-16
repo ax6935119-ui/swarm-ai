@@ -13,36 +13,39 @@ export default function Navbar() {
   }, []);
 
   return (
-    <nav className="sticky top-0 z-50 backdrop-blur-md bg-white/90 border-b border-slate-200 shadow-sm">
+    <nav className="sticky top-0 z-50 backdrop-blur-md bg-slate-900/95 border-b border-slate-800 shadow-sm">
 
-      <div className="px-8 py-5 flex items-center justify-between">
+      <div className="px-6 sm:px-8 py-4 flex items-center justify-between">
 
         {/* Left Side */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3.5">
 
           <div className="
-            w-14
-            h-14
-            rounded-2xl
+            w-11
+            h-11
+            rounded-xl
             bg-gradient-to-br
-            from-blue-600
-            to-indigo-700
+            from-red-600
+            to-red-800
             text-white
             flex
             items-center
             justify-center
-            shadow-lg
+            shadow-md
+            shadow-red-950/40
+            border
+            border-red-500/30
           ">
-            <FaRobot size={24} />
+            <FaRobot size={20} />
           </div>
 
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-xl font-bold text-white tracking-tight">
               SwarmAI
             </h1>
 
-            <p className="text-sm text-slate-500">
-              Multi-Agent Disaster Response Platform
+            <p className="text-xs text-slate-400">
+              Autonomous Disaster Decision Intelligence
             </p>
           </div>
 
@@ -51,15 +54,15 @@ export default function Navbar() {
         {/* Right Side */}
         <div className="text-right">
 
-          <p className="text-xs uppercase tracking-wider text-slate-400">
-            Current Time
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-mono">
+            System Time
           </p>
 
-          <p className="font-semibold text-slate-800">
+          <p className="text-sm font-semibold text-slate-200 font-mono">
             {time.toLocaleTimeString()}
           </p>
 
-          <p className="text-sm text-slate-500">
+          <p className="text-xs text-slate-500 font-mono">
             {time.toLocaleDateString()}
           </p>
 

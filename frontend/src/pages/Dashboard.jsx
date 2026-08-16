@@ -8,6 +8,9 @@ import MapDashboard from "../components/MapDashboard";
 import ReasoningPanel from "../components/ReasoningPanel";
 import AgentCommunicationPanel from "../components/AgentCommunicationPanel";
 import DisasterInputPanel from "../components/DisasterInputPanel";
+import WelcomeScreen from "../components/WelcomeScreen";
+import AnalysisScreen from "../components/AnalysisScreen";
+import ResponseView from "../components/ResponseView";
 
 import useDashboardData from "../hooks/useDashboardData";
 
@@ -22,6 +25,12 @@ export default function Dashboard() {
     error,
   } = useDashboardData();
 
+
+  // ============================================================
+  // SCREEN / STAGE STATE
+  // ============================================================
+
+  const [currentStep, setCurrentStep] = useState("welcome"); // "welcome" | "reporting"
 
   // ============================================================
   // DISASTER ANALYSIS STATE
@@ -42,6 +51,11 @@ export default function Dashboard() {
   const [
     disasterAnalysis,
     setDisasterAnalysis,
+  ] = useState(null);
+
+  const [
+    apiError,
+    setApiError,
   ] = useState(null);
 
 
@@ -87,9 +101,15 @@ export default function Dashboard() {
     // START ANALYSIS
     // ----------------------------------------------------------
 
+    setDisasterInput(input);
+
     setAnalyzingDisaster(true);
 
     setDisasterAnalysis(null);
+
+    setApiError(null);
+
+    setCurrentStep("analyzing");
 
 
     try {
@@ -143,9 +163,13 @@ export default function Dashboard() {
       // BACKEND REQUEST
       // ========================================================
 
+      const baseURL =
+        import.meta.env.VITE_BACKEND_URL ||
+        "http://127.0.0.1:8000";
+
       const response = await axios.post(
 
-        "http://127.0.0.1:8000/disaster/analyze",
+        `${baseURL}/disaster/analyze`,
 
         formData,
 
@@ -185,14 +209,11 @@ export default function Dashboard() {
       // STORE RESULTS
       // ========================================================
 
-      setDisasterInput(
-        input
-      );
-
-
       setDisasterAnalysis(
         response.data
       );
+
+      setCurrentStep("response");
 
 
       console.log(
@@ -228,12 +249,9 @@ export default function Dashboard() {
         );
 
 
-        alert(
-
+        setApiError(
           err.response.data?.detail ||
-
-          "Backend failed to analyze the disaster."
-
+          "Backend failed to analyze the incident."
         );
 
       }
@@ -245,8 +263,8 @@ export default function Dashboard() {
 
       else if (err.request) {
 
-        alert(
-          "Unable to connect to the backend. Make sure FastAPI is running on port 8000."
+        setApiError(
+          "Unable to connect to the backend server. Ensure FastAPI is running on port 8000."
         );
 
       }
@@ -258,12 +276,14 @@ export default function Dashboard() {
 
       else {
 
-        alert(
+        setApiError(
           err.message ||
-          "Disaster analysis failed."
+          "An unexpected error occurred during incident analysis."
         );
 
       }
+
+      setCurrentStep("reporting");
 
     }
 
@@ -276,6 +296,92 @@ export default function Dashboard() {
     }
 
   };
+
+
+  // ============================================================
+  // RESET / REPORT ANOTHER INCIDENT
+  // ============================================================
+
+  const handleReset = () => {
+    setDisasterAnalysis(null);
+    setDisasterInput(null);
+    setApiError(null);
+    setCurrentStep("reporting");
+  };
+
+
+  // ============================================================
+  // WELCOME SCREEN
+  // ============================================================
+
+  if (currentStep === "welcome") {
+    return (
+      <WelcomeScreen
+        onBegin={() => setCurrentStep("reporting")}
+      />
+    );
+  }
+
+
+  // ============================================================
+  // ANALYSIS SCREEN
+  // ============================================================
+
+  if (currentStep === "analyzing") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <Navbar />
+
+        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center my-auto">
+          <AnalysisScreen
+            location={disasterInput?.location || ""}
+          />
+        </main>
+      </div>
+    );
+  }
+
+
+  // ============================================================
+  // ACTIONABLE RESPONSE VIEW
+  // ============================================================
+
+  if (currentStep === "response" && disasterAnalysis) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <Navbar />
+
+        <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-8">
+          <ResponseView
+            data={disasterAnalysis}
+            onReset={handleReset}
+          />
+        </main>
+      </div>
+    );
+  }
+
+
+  // ============================================================
+  // REPORTING VIEW
+  // ============================================================
+
+  if (currentStep === "reporting") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <Navbar />
+
+        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center my-auto">
+          <DisasterInputPanel
+            onAnalyze={handleDisasterAnalyze}
+            loading={analyzingDisaster}
+            apiError={apiError}
+            initialValues={disasterInput}
+          />
+        </main>
+      </div>
+    );
+  }
 
 
   // ============================================================
