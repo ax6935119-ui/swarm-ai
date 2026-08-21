@@ -6,3 +6,4 @@ requests
 langgraph
 networkx
 pymongo
+python-multipart

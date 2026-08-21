@@ -10,12 +10,14 @@ import {
   FaArrowRight,
   FaSpinner,
 } from "react-icons/fa";
+import useGeolocation from "../hooks/useGeolocation";
 
 export default function DisasterInputPanel({
   onAnalyze,
   loading = false,
   apiError = null,
   initialValues = null,
+  onLocationDetected = null,
 }) {
   const [location, setLocation] = useState(initialValues?.location || "");
   const [description, setDescription] = useState(initialValues?.description || "");
@@ -25,6 +27,79 @@ export default function DisasterInputPanel({
   const [errors, setErrors] = useState({});
 
   const fileInputRef = useRef(null);
+
+  const { coords, error: geoError, loading: geoLoading, refetch: getGeoLocation } = useGeolocation({ auto: false });
+  const [geoLocating, setGeoLocating] = useState(false);
+  const [geoAlert, setGeoAlert] = useState(null);
+
+  const reverseGeocode = async (lat, lng) => {
+    setGeoLocating(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            "Accept-Language": "en",
+            "User-Agent": "SwarmAI-Disaster-System",
+          },
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to resolve address from coordinates.");
+      }
+      const data = await response.json();
+      const displayName = data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      setLocation(displayName);
+      
+      if (errors.location) {
+        setErrors((prev) => {
+          const next = { ...prev };
+          delete next.location;
+          return next;
+        });
+      }
+
+      if (onLocationDetected) {
+        onLocationDetected({
+          lat,
+          lng,
+          address: displayName,
+        });
+      }
+    } catch (err) {
+      console.error("Reverse geocoding error:", err);
+      const coordStr = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      setLocation(coordStr);
+      if (onLocationDetected) {
+        onLocationDetected({
+          lat,
+          lng,
+          address: coordStr,
+        });
+      }
+    } finally {
+      setGeoLocating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!geoLocating) return;
+
+    if (coords) {
+      setGeoLocating(false);
+      reverseGeocode(coords.lat, coords.lng);
+    } else if (geoError) {
+      setGeoLocating(false);
+      setGeoAlert(geoError);
+    }
+  }, [coords, geoError, geoLocating]);
+
+  const handleUseMyLocation = () => {
+    if (loading) return;
+    setGeoLocating(true);
+    setGeoAlert(null);
+    getGeoLocation();
+  };
 
   // Manage preview URL cleanup
   useEffect(() => {
@@ -193,6 +268,24 @@ export default function DisasterInputPanel({
                 <span>Incident Location</span>
                 <span className="text-xs text-red-400 font-normal">*Required</span>
               </label>
+              <button
+                type="button"
+                onClick={handleUseMyLocation}
+                disabled={loading || geoLocating}
+                className="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 bg-blue-950/40 border border-blue-800/50 hover:bg-blue-900/30 px-2.5 py-1.5 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {geoLocating ? (
+                  <>
+                    <FaSpinner className="animate-spin text-[10px]" />
+                    <span>Locating...</span>
+                  </>
+                ) : (
+                  <>
+                    <FaMapMarkerAlt className="text-[10px]" />
+                    <span>Use My Location</span>
+                  </>
+                )}
+              </button>
             </div>
 
             <p className="text-xs text-slate-400">
@@ -233,6 +326,13 @@ export default function DisasterInputPanel({
               <p className="text-xs text-red-400 flex items-center gap-1.5 pt-1">
                 <FaExclamationCircle className="shrink-0" />
                 <span>{errors.location}</span>
+              </p>
+            )}
+
+            {geoAlert && (
+              <p className="text-xs text-amber-400 flex items-center gap-1.5 pt-1">
+                <FaExclamationCircle className="shrink-0" />
+                <span>{geoAlert}</span>
               </p>
             )}
           </div>

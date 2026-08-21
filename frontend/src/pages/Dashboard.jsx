@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Navbar from "../components/Navbar";
 import StatsCards from "../components/StatsCards";
@@ -13,6 +13,7 @@ import AnalysisScreen from "../components/AnalysisScreen";
 import ResponseView from "../components/ResponseView";
 
 import useDashboardData from "../hooks/useDashboardData";
+import useGeolocation from "../hooks/useGeolocation";
 
 import axios from "axios";
 
@@ -24,6 +25,19 @@ export default function Dashboard() {
     loading,
     error,
   } = useDashboardData();
+
+  const { coords: geoCoords } = useGeolocation({ auto: true });
+  const [userLocation, setUserLocation] = useState(null);
+
+  useEffect(() => {
+    if (geoCoords?.lat && geoCoords?.lng) {
+      setUserLocation({ lat: geoCoords.lat, lng: geoCoords.lng });
+    }
+  }, [geoCoords]);
+
+  const handleLocationDetected = (loc) => {
+    setUserLocation({ lat: loc.lat, lng: loc.lng });
+  };
 
 
   // ============================================================
@@ -355,6 +369,7 @@ export default function Dashboard() {
           <ResponseView
             data={disasterAnalysis}
             onReset={handleReset}
+            userLocation={userLocation}
           />
         </main>
       </div>
@@ -377,6 +392,7 @@ export default function Dashboard() {
             loading={analyzingDisaster}
             apiError={apiError}
             initialValues={disasterInput}
+            onLocationDetected={handleLocationDetected}
           />
         </main>
       </div>
@@ -585,6 +601,10 @@ export default function Dashboard() {
 
           loading={
             analyzingDisaster
+          }
+
+          onLocationDetected={
+            handleLocationDetected
           }
 
         />
@@ -1049,6 +1069,7 @@ export default function Dashboard() {
 
             <MapDashboard
               data={dashboardData}
+              userLocation={userLocation}
             />
 
           </div>

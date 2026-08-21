@@ -14,7 +14,7 @@ import {
 } from "react-icons/fa";
 import MapDashboard from "./MapDashboard";
 
-export default function ResponseView({ data, onReset }) {
+export default function ResponseView({ data, onReset, userLocation = null }) {
   if (!data || !data.event) {
     return (
       <div className="w-full max-w-4xl mx-auto py-12 text-center text-slate-400">
@@ -387,7 +387,7 @@ export default function ResponseView({ data, onReset }) {
         transition={{ duration: 0.4, delay: 0.25 }}
         className="rounded-2xl overflow-hidden shadow-2xl border border-slate-800"
       >
-        <MapDashboard data={mapData} />
+        <MapDashboard data={mapData} userLocation={userLocation} />
       </motion.div>
 
       {/* 5. RESET / REPORT ANOTHER INCIDENT ACTION */}
