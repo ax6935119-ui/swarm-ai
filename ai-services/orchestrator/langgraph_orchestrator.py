@@ -1119,7 +1119,7 @@ def run_disaster(
     )
 
     print(
-        "🚨 DISASTER ORCHESTRATION STARTED"
+        " DISASTER ORCHESTRATION STARTED"
     )
 
     print(
@@ -1174,7 +1174,7 @@ def run_disaster(
 
 
     print(
-        "\n📚 Historical memory used:",
+        "\n Historical memory used:",
         len(historical_context)
     )
 
@@ -1184,7 +1184,7 @@ def run_disaster(
     )
 
     print(
-        "✅ DISASTER ORCHESTRATION COMPLETED"
+        " DISASTER ORCHESTRATION COMPLETED"
     )
 
     print(
