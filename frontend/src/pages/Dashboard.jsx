@@ -1,22 +1,19 @@
 import { useState, useEffect } from "react";
+import axios from "axios";
 
 import Navbar from "../components/Navbar";
-
 import DisasterInputPanel from "../components/DisasterInputPanel";
-
 import WelcomeScreen from "../components/WelcomeScreen";
-
 import AnalysisScreen from "../components/AnalysisScreen";
-
 import ResponseView from "../components/ResponseView";
 
 import useDashboardData from "../hooks/useDashboardData";
 import useGeolocation from "../hooks/useGeolocation";
 
-import axios from "axios";
-
-
 export default function Dashboard() {
+  // ============================================================
+  // DASHBOARD / BACKEND STATE
+  // ============================================================
 
   const {
     dashboardData,
@@ -24,493 +21,340 @@ export default function Dashboard() {
     error,
   } = useDashboardData();
 
-  const { coords: geoCoords } = useGeolocation({ auto: true });
+  // ============================================================
+  // GEOLOCATION
+  // ============================================================
+
+  const { coords: geoCoords } = useGeolocation({
+    auto: true,
+  });
+
   const [userLocation, setUserLocation] = useState(null);
 
   useEffect(() => {
     if (geoCoords?.lat && geoCoords?.lng) {
-      setUserLocation({ lat: geoCoords.lat, lng: geoCoords.lng });
+      setUserLocation({
+        lat: geoCoords.lat,
+        lng: geoCoords.lng,
+      });
     }
   }, [geoCoords]);
 
   const handleLocationDetected = (loc) => {
-    setUserLocation({ lat: loc.lat, lng: loc.lng });
-  };
+    if (!loc) return;
 
+    setUserLocation({
+      lat: loc.lat,
+      lng: loc.lng,
+    });
+  };
 
   // ============================================================
   // SCREEN STATE
   // ============================================================
 
-  const [
-    currentStep,
-    setCurrentStep,
-  ] = useState(
-    "welcome"
-  );
+  const [currentStep, setCurrentStep] = useState("welcome");
 
+  // Possible states:
+  // welcome
+  // reporting
+  // analyzing
+  // response
 
   // ============================================================
   // DISASTER STATE
   // ============================================================
 
-  const [
-    analyzingDisaster,
-    setAnalyzingDisaster,
-  ] = useState(false);
+  const [analyzingDisaster, setAnalyzingDisaster] =
+    useState(false);
 
+  const [disasterInput, setDisasterInput] =
+    useState(null);
 
-  const [
-    disasterInput,
-    setDisasterInput,
-  ] = useState(null);
+  const [disasterAnalysis, setDisasterAnalysis] =
+    useState(null);
 
-
-  const [
-    disasterAnalysis,
-    setDisasterAnalysis,
-  ] = useState(null);
-
-
-  const [
-    apiError,
-    setApiError,
-  ] = useState(null);
-
+  const [apiError, setApiError] =
+    useState(null);
 
   // ============================================================
   // ANALYZE DISASTER
   // ============================================================
 
-  const handleDisasterAnalyze =
-    async (input) => {
+  const handleDisasterAnalyze = async (input) => {
+    console.log("🚨 DISASTER INPUT:", input);
+
+    // ==========================================================
+    // VALIDATE LOCATION
+    // ==========================================================
+
+    if (!input?.location?.trim()) {
+      setApiError(
+        "Please enter the disaster location."
+      );
+      return;
+    }
+
+    // ==========================================================
+    // VALIDATE IMAGES
+    // ==========================================================
+
+    if (
+      !input?.images ||
+      input.images.length === 0
+    ) {
+      setApiError(
+        "Please upload or capture at least one disaster image."
+      );
+      return;
+    }
+
+    // ==========================================================
+    // RESET STATE
+    // ==========================================================
+
+    setDisasterInput(input);
+    setAnalyzingDisaster(true);
+    setDisasterAnalysis(null);
+    setApiError(null);
+
+    setCurrentStep("analyzing");
+
+    try {
+      // ========================================================
+      // CREATE FORM DATA
+      // ========================================================
+
+      const formData = new FormData();
+
+      formData.append(
+        "location",
+        input.location.trim()
+      );
+
+      formData.append(
+        "description",
+        input.description?.trim() || ""
+      );
+
+      // Backend expects:
+      // images: list[UploadFile]
+      //
+      // Therefore all images must use
+      // the same field name: "images"
+
+      input.images.forEach((image) => {
+        formData.append(
+          "images",
+          image
+        );
+      });
 
       console.log(
-        "🚨 DISASTER INPUT:",
-        input
+        "📤 Sending disaster analysis request..."
       );
 
+      console.log(
+        "📍 Location:",
+        input.location
+      );
+
+      console.log(
+        "📝 Description:",
+        input.description
+      );
+
+      console.log(
+        "📷 Images:",
+        input.images.map((image) => ({
+          name: image.name,
+          type: image.type,
+          size: image.size,
+        }))
+      );
 
       // ========================================================
-      // VALIDATE LOCATION
+      // BACKEND URL
       // ========================================================
 
-      if (
-        !input?.location?.trim()
-      ) {
+      const baseURL =
+        import.meta.env.VITE_BACKEND_URL ||
+        "http://127.0.0.1:8000";
 
-        setApiError(
-          "Please enter the disaster location."
+      // ========================================================
+      // API REQUEST
+      // ========================================================
+
+      const response = await axios.post(
+        `${baseURL}/disaster/analyze`,
+        formData,
+        {
+          timeout: 180000,
+        }
+      );
+
+      console.log(
+        "✅ DISASTER RESPONSE:",
+        response.data
+      );
+
+      // ========================================================
+      // VALIDATE RESPONSE
+      // ========================================================
+
+      if (!response.data?.success) {
+        throw new Error(
+          response.data?.message ||
+          "Backend returned an unsuccessful response."
         );
-
-        return;
-
       }
 
-
       // ========================================================
-      // VALIDATE IMAGES
+      // STORE RESPONSE
       // ========================================================
-
-      if (
-        !input?.images ||
-        input.images.length === 0
-      ) {
-
-        setApiError(
-          "Please upload or capture at least one disaster image."
-        );
-
-        return;
-
-      }
-
-
-      // ========================================================
-      // RESET STATE
-      // ========================================================
-
-      setDisasterInput(
-        input
-      );
-
-      setAnalyzingDisaster(
-        true
-      );
 
       setDisasterAnalysis(
-        null
-      );
-
-      setApiError(
-        null
+        response.data
       );
 
       setCurrentStep(
-        "analyzing"
+        "response"
       );
 
+      console.log(
+        "✅ Disaster analysis completed."
+      );
+    } catch (err) {
+      console.error(
+        "❌ Disaster analysis failed:",
+        err
+      );
 
-      try {
+      // ========================================================
+      // BACKEND ERROR
+      // ========================================================
 
-        // ======================================================
-        // CREATE FORM DATA
-        // ======================================================
-
-        const formData =
-          new FormData();
-
-
-        formData.append(
-
-          "location",
-
-          input.location.trim()
-
+      if (err.response) {
+        console.error(
+          "Status:",
+          err.response.status
         );
-
-
-        formData.append(
-
-          "description",
-
-          input.description?.trim() || ""
-
-        );
-
-
-        // ======================================================
-        // IMPORTANT
-        //
-        // Backend expects:
-        //
-        // images: list[UploadFile]
-        //
-        // Therefore every image uses the SAME
-        // field name "images".
-        // ======================================================
-
-        input.images.forEach(
-          (image) => {
-
-            formData.append(
-
-              "images",
-
-              image
-
-            );
-
-          }
-        );
-
-
-        console.log(
-          "📤 Sending disaster request..."
-        );
-
-
-        console.log(
-          "📍 Location:",
-          input.location
-        );
-
-
-        console.log(
-          "📝 Description:",
-          input.description
-        );
-
-
-        console.log(
-          "📷 Images:",
-          input.images.map(
-            (image) => ({
-              name:
-                image.name,
-
-              type:
-                image.type,
-
-              size:
-                image.size,
-            })
-          )
-        );
-
-
-        // ======================================================
-        // BACKEND URL
-        // ======================================================
-
-        const baseURL =
-
-          import.meta.env
-            .VITE_BACKEND_URL
-
-          ||
-
-          "http://127.0.0.1:8000";
-
-
-        // ======================================================
-        // API REQUEST
-        //
-        // Do NOT manually set Content-Type.
-        // Browser automatically adds multipart boundary.
-        // ======================================================
-
-        const response =
-          await axios.post(
-
-            `${baseURL}/disaster/analyze`,
-
-            formData,
-
-            {
-
-              timeout:
-                180000,
-
-            }
-
-          );
-
-
-        console.log(
-          "✅ DISASTER RESPONSE:",
-          response.data
-        );
-
-
-        // ======================================================
-        // VALIDATE RESPONSE
-        // ======================================================
-
-        if (
-          !response.data?.success
-        ) {
-
-          throw new Error(
-            "Backend returned an unsuccessful response."
-          );
-
-        }
-
-
-        // ======================================================
-        // STORE RESPONSE
-        // ======================================================
-
-        setDisasterAnalysis(
-          response.data
-        );
-
-
-        setCurrentStep(
-          "response"
-        );
-
-
-        console.log(
-          "✅ Disaster analysis completed."
-        );
-
-      }
-
-      catch (err) {
 
         console.error(
-          "❌ Disaster analysis failed:",
-          err
+          "Response:",
+          err.response.data
         );
 
-
-        // ======================================================
-        // BACKEND ERROR
-        // ======================================================
+        const detail =
+          err.response.data?.detail;
 
         if (
-          err.response
+          typeof detail === "object" &&
+          detail !== null
         ) {
-
-          console.error(
-            "Status:",
-            err.response.status
-          );
-
-          console.error(
-            "Response:",
-            err.response.data
-          );
-
-
-          const detail =
-            err.response.data?.detail;
-
-
-          if (
-            typeof detail ===
-            "object"
-          ) {
-
-            setApiError(
-
-              detail.message
-
-              ||
-
-              "The submitted incident could not be processed."
-
-            );
-
-          }
-
-          else {
-
-            setApiError(
-
-              detail
-
-              ||
-
-              "Backend failed to analyze the incident."
-
-            );
-
-          }
-
-        }
-
-
-        // ======================================================
-        // CONNECTION ERROR
-        // ======================================================
-
-        else if (
-          err.request
-        ) {
-
           setApiError(
-            "Unable to connect to the backend. Make sure FastAPI is running on port 8000."
+            detail.message ||
+            err.response.data?.message ||
+            "The submitted incident could not be processed."
           );
-
-        }
-
-
-        // ======================================================
-        // OTHER ERROR
-        // ======================================================
-
-        else {
-
+        } else {
           setApiError(
-
-            err.message
-
-            ||
-
-            "An unexpected error occurred."
-
+            detail ||
+            err.response.data?.message ||
+            "Backend failed to analyze the incident."
           );
-
         }
-
-
-        setCurrentStep(
-          "reporting"
-        );
-
       }
 
-      finally {
+      // ========================================================
+      // CONNECTION ERROR
+      // ========================================================
 
-        setAnalyzingDisaster(
-          false
+      else if (err.request) {
+        setApiError(
+          "Unable to connect to the backend. Make sure FastAPI is running on port 8000."
         );
-
       }
 
-    };
+      // ========================================================
+      // OTHER ERROR
+      // ========================================================
 
+      else {
+        setApiError(
+          err.message ||
+          "An unexpected error occurred."
+        );
+      }
+
+      // Go back to reporting screen
+      setCurrentStep(
+        "reporting"
+      );
+    } finally {
+      setAnalyzingDisaster(
+        false
+      );
+    }
+  };
 
   // ============================================================
   // RESET
   // ============================================================
 
   const handleReset = () => {
-
-    setDisasterAnalysis(
-      null
-    );
-
-    setDisasterInput(
-      null
-    );
-
-    setApiError(
-      null
-    );
+    setDisasterAnalysis(null);
+    setDisasterInput(null);
+    setApiError(null);
+    setAnalyzingDisaster(false);
 
     setCurrentStep(
       "reporting"
     );
-
   };
 
-
   // ============================================================
-  // WELCOME
+  // WELCOME SCREEN
   // ============================================================
 
-  if (
-    currentStep === "welcome"
-  ) {
-
+  if (currentStep === "welcome") {
     return (
-
       <WelcomeScreen
         onBegin={() =>
-          setCurrentStep(
-            "reporting"
-          )
+          setCurrentStep("reporting")
         }
       />
-
     );
-
   }
 
-
   // ============================================================
-  // ANALYZING
+  // ANALYZING SCREEN
   // ============================================================
 
-<<<<<<< HEAD
-  if (
-    currentStep === "analyzing"
-  ) {
-=======
   if (currentStep === "analyzing") {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
         <Navbar />
 
-        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center my-auto">
+        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center">
           <AnalysisScreen
-            location={disasterInput?.location || ""}
+            location={
+              disasterInput?.location || ""
+            }
           />
         </main>
       </div>
     );
   }
 
-
   // ============================================================
-  // ACTIONABLE RESPONSE VIEW
+  // RESPONSE SCREEN
   // ============================================================
 
-  if (currentStep === "response" && disasterAnalysis) {
+  if (
+    currentStep === "response" &&
+    disasterAnalysis
+  ) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
         <Navbar />
@@ -526,9 +370,8 @@ export default function Dashboard() {
     );
   }
 
-
   // ============================================================
-  // REPORTING VIEW
+  // REPORTING SCREEN
   // ============================================================
 
   if (currentStep === "reporting") {
@@ -536,813 +379,60 @@ export default function Dashboard() {
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
         <Navbar />
 
-        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center my-auto">
+        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center">
           <DisasterInputPanel
             onAnalyze={handleDisasterAnalyze}
             loading={analyzingDisaster}
             apiError={apiError}
             initialValues={disasterInput}
-            onLocationDetected={handleLocationDetected}
+            onLocationDetected={
+              handleLocationDetected
+            }
           />
         </main>
       </div>
     );
   }
-
-
-  // ============================================================
-  // LOADING
-  // ============================================================
-
-  if (loading) {
->>>>>>> c7cbde1def9521c6ab760e626a1c3d0f22202c5b
-
-    return (
-
-      <div className="
-        min-h-screen
-        bg-slate-950
-        text-slate-100
-        flex
-        flex-col
-      ">
-
-        <Navbar />
-
-
-        <main className="
-          flex-1
-          max-w-5xl
-          w-full
-          mx-auto
-          p-4
-          sm:p-8
-          flex
-          flex-col
-          justify-center
-        ">
-
-<<<<<<< HEAD
-          <AnalysisScreen
-            location={
-              disasterInput?.location || ""
-            }
-=======
-          <div className="
-            w-3
-            h-3
-            rounded-full
-            bg-green-500
-            animate-pulse
-          " />
-
-          <span className="
-            text-sm
-            font-semibold
-            text-slate-700
-          ">
-
-            SYSTEM ACTIVE
-
-          </span>
-
-        </div>
-
-      </div>
-
-
-      {/* ======================================================
-          MAIN CONTENT
-      ======================================================= */}
-
-      <div className="
-        p-6
-        space-y-6
-      ">
-
-
-        {/* ====================================================
-            DISASTER INPUT
-        ===================================================== */}
-
-        <DisasterInputPanel
-
-          onAnalyze={
-            handleDisasterAnalyze
-          }
-
-          loading={
-            analyzingDisaster
-          }
-
-          onLocationDetected={
-            handleLocationDetected
-          }
-
-        />
-
-
-        {/* ====================================================
-            INPUT CONFIRMATION
-        ===================================================== */}
-
-        {disasterInput && (
-
-          <div className="
-            bg-blue-50
-            border
-            border-blue-200
-            rounded-2xl
-            p-5
-          ">
-
-            <h3 className="
-              font-bold
-              text-blue-800
-              mb-2
-            ">
-
-              Disaster Input Captured
-
-            </h3>
-
-
-            <p className="
-              text-sm
-              text-blue-700
-            ">
-
-              <strong>
-                Location:
-              </strong>
-
-              {" "}
-
-              {disasterInput.location}
-
-            </p>
-
-
-            {disasterInput.description && (
-
-              <p className="
-                text-sm
-                text-blue-700
-                mt-1
-              ">
-
-                <strong>
-                  Description:
-                </strong>
-
-                {" "}
-
-                {disasterInput.description}
-
-              </p>
-
-            )}
-
-
-            {disasterInput.image && (
-
-              <p className="
-                text-sm
-                text-green-700
-                mt-1
-                font-medium
-              ">
-
-                Image uploaded:
-
-                {" "}
-
-                {disasterInput.image.name}
-
-              </p>
-
-            )}
-
-          </div>
-
-        )}
-
-
-        {/* ====================================================
-            AI DISASTER ASSESSMENT
-        ===================================================== */}
-
-        {disasterAnalysis?.event && (
-
-          <div className="
-            bg-white
-            border
-            border-slate-200
-            rounded-2xl
-            shadow-lg
-            p-6
-          ">
-
-            <div className="
-              flex
-              flex-col
-              md:flex-row
-              md:items-center
-              md:justify-between
-              gap-3
-              mb-5
-            ">
-
-              <div>
-
-                <h2 className="
-                  text-xl
-                  font-bold
-                  text-slate-800
-                ">
-
-                  AI Disaster Assessment
-
-                </h2>
-
-
-                <p className="
-                  text-sm
-                  text-slate-500
-                  mt-1
-                ">
-
-                  Dynamic analysis generated from the submitted incident data.
-
-                </p>
-
-              </div>
-
-
-              <div className="
-                px-4
-                py-2
-                rounded-xl
-                bg-red-50
-                border
-                border-red-200
-              ">
-
-                <span className="
-                  text-sm
-                  font-bold
-                  text-red-600
-                ">
-
-                  Severity:{" "}
-                  {disasterAnalysis.event.severity}
-                  /10
-
-                </span>
-
-              </div>
-
-            </div>
-
-
-            {/* ==================================================
-                BASIC DETAILS
-            =================================================== */}
-
-            <div className="
-              grid
-              grid-cols-1
-              md:grid-cols-3
-              gap-4
-              mb-5
-            ">
-
-
-              <div className="
-                bg-slate-50
-                rounded-xl
-                p-4
-              ">
-
-                <p className="
-                  text-xs
-                  text-slate-500
-                  mb-1
-                ">
-
-                  Disaster Type
-
-                </p>
-
-
-                <p className="
-                  font-bold
-                  text-slate-800
-                ">
-
-                  {disasterAnalysis.event.disaster_type ||
-                    "Unknown"}
-
-                </p>
-
-              </div>
-
-
-              <div className="
-                bg-slate-50
-                rounded-xl
-                p-4
-              ">
-
-                <p className="
-                  text-xs
-                  text-slate-500
-                  mb-1
-                ">
-
-                  Confidence
-
-                </p>
-
-
-                <p className="
-                  font-bold
-                  text-slate-800
-                ">
-
-                  {(
-                    Number(
-                      disasterAnalysis.event.confidence || 0
-                    ) * 100
-                  ).toFixed(1)}
-
-                  %
-
-                </p>
-
-              </div>
-
-
-              <div className="
-                bg-slate-50
-                rounded-xl
-                p-4
-              ">
-
-                <p className="
-                  text-xs
-                  text-slate-500
-                  mb-1
-                ">
-
-                  Evacuation
-
-                </p>
-
-
-                <p className="
-                  font-bold
-                  text-slate-800
-                ">
-
-                  {
-                    disasterAnalysis.event
-                      .evacuation_required
-
-                      ? "Required"
-
-                      : "Not Required"
-                  }
-
-                </p>
-
-              </div>
-
-            </div>
-
-
-            {/* ==================================================
-                SUMMARY
-            =================================================== */}
-
-            {disasterAnalysis.event.summary && (
-
-              <div className="
-                mb-5
-              ">
-
-                <h3 className="
-                  font-semibold
-                  text-slate-700
-                  mb-2
-                ">
-
-                  AI Summary
-
-                </h3>
-
-
-                <p className="
-                  text-sm
-                  text-slate-600
-                  leading-relaxed
-                ">
-
-                  {disasterAnalysis.event.summary}
-
-                </p>
-
-              </div>
-
-            )}
-
-
-            {/* ==================================================
-                OBSERVATIONS
-            =================================================== */}
-
-            {Array.isArray(
-              disasterAnalysis.event.observations
-            ) &&
-
-            disasterAnalysis.event.observations.length > 0 && (
-
-              <div className="
-                mb-5
-              ">
-
-                <h3 className="
-                  font-semibold
-                  text-slate-700
-                  mb-2
-                ">
-
-                  AI Observations
-
-                </h3>
-
-
-                <ul className="
-                  list-disc
-                  pl-5
-                  space-y-1
-                  text-sm
-                  text-slate-600
-                ">
-
-                  {disasterAnalysis.event.observations.map(
-                    (observation, index) => (
-
-                      <li key={index}>
-
-                        {observation}
-
-                      </li>
-
-                    )
-                  )}
-
-                </ul>
-
-              </div>
-
-            )}
-
-
-            {/* ==================================================
-                HAZARDS
-            =================================================== */}
-
-            {Array.isArray(
-              disasterAnalysis.event.hazards
-            ) &&
-
-            disasterAnalysis.event.hazards.length > 0 && (
-
-              <div>
-
-                <h3 className="
-                  font-semibold
-                  text-slate-700
-                  mb-2
-                ">
-
-                  Detected Hazards
-
-                </h3>
-
-
-                <div className="
-                  flex
-                  flex-wrap
-                  gap-2
-                ">
-
-                  {disasterAnalysis.event.hazards.map(
-                    (hazard, index) => (
-
-                      <span
-                        key={index}
-                        className="
-                          px-3
-                          py-1
-                          rounded-full
-                          bg-red-50
-                          text-red-700
-                          text-xs
-                          font-semibold
-                          border
-                          border-red-200
-                        "
-                      >
-
-                        {hazard}
-
-                      </span>
-
-                    )
-                  )}
-
-                </div>
-
-              </div>
-
-            )}
-
-          </div>
-
-        )}
-
-
-        {/* ====================================================
-            STATS
-        ===================================================== */}
-
-        <StatsCards
-          data={dashboardData}
-        />
-
-
-        {/* ====================================================
-            MAP + LOGS
-        ===================================================== */}
-
-        <div className="
-          grid
-          grid-cols-1
-          xl:grid-cols-3
-          gap-6
-        ">
-
-
-          <div className="
-            xl:col-span-2
-          ">
-
-            <MapDashboard
-              data={dashboardData}
-              userLocation={userLocation}
-            />
-
-          </div>
-
-
-          <div>
-
-            <LogsPanel
-              data={dashboardData}
-            />
-
-          </div>
-
-        </div>
-
-
-        {/* ====================================================
-            AGENT COORDINATION
-        ===================================================== */}
-
-        <div>
-
-          <div className="
-            flex
-            items-center
-            justify-between
-            mb-4
-          ">
-
-            <h2 className="
-              text-2xl
-              font-bold
-              text-slate-800
-            ">
-
-              AI Agent Coordination
-
-            </h2>
-
-
-            <span className="
-              text-sm
-              text-slate-500
-              bg-white
-              px-3
-              py-1
-              rounded-lg
-              shadow-sm
-            ">
-
-              LangGraph Orchestrated
-
-            </span>
-
-          </div>
-
-
-          <AgentCards
-            data={dashboardData}
->>>>>>> c7cbde1def9521c6ab760e626a1c3d0f22202c5b
-          />
-
-        </main>
-
-      </div>
-
-    );
-
-  }
-
-
-  // ============================================================
-  // RESPONSE
-  // ============================================================
-
-  if (
-    currentStep === "response"
-
-    &&
-
-    disasterAnalysis
-  ) {
-
-    return (
-
-      <div className="
-        min-h-screen
-        bg-slate-950
-        text-slate-100
-        flex
-        flex-col
-      ">
-
-        <Navbar />
-
-
-        <main className="
-          flex-1
-          max-w-6xl
-          w-full
-          mx-auto
-          p-4
-          sm:p-8
-        ">
-
-          <ResponseView
-            data={
-              disasterAnalysis
-            }
-            onReset={
-              handleReset
-            }
-          />
-
-        </main>
-
-      </div>
-
-    );
-
-  }
-
-
-  // ============================================================
-  // REPORTING
-  // ============================================================
-
-  if (
-    currentStep === "reporting"
-  ) {
-
-    return (
-
-      <div className="
-        min-h-screen
-        bg-slate-950
-        text-slate-100
-        flex
-        flex-col
-      ">
-
-        <Navbar />
-
-
-        <main className="
-          flex-1
-          max-w-5xl
-          w-full
-          mx-auto
-          p-4
-          sm:p-8
-          flex
-          flex-col
-          justify-center
-        ">
-
-          <DisasterInputPanel
-
-            onAnalyze={
-              handleDisasterAnalyze
-            }
-
-            loading={
-              analyzingDisaster
-            }
-
-            apiError={
-              apiError
-            }
-
-            initialValues={
-              disasterInput
-            }
-
-          />
-
-        </main>
-
-      </div>
-
-    );
-
-  }
-
 
   // ============================================================
   // FALLBACK LOADING
   // ============================================================
 
-  if (
-    loading
-  ) {
-
+  if (loading) {
     return (
-
-      <div className="
-        min-h-screen
-        flex
-        items-center
-        justify-center
-        bg-slate-950
-        text-white
-      ">
-
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
         Loading SwarmAI...
-
       </div>
-
     );
-
   }
-
 
   // ============================================================
   // CONNECTION ERROR
   // ============================================================
 
-  if (
-    error
-  ) {
-
+  if (error) {
     return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-red-400 gap-3">
+        <h2 className="text-xl font-bold">
+          Backend Connection Failed
+        </h2>
 
-      <div className="
-        min-h-screen
-        flex
-        items-center
-        justify-center
-        bg-slate-950
-        text-red-400
-      ">
+        <p className="text-sm text-slate-400">
+          {error?.message ||
+            "Unable to connect to the backend."}
+        </p>
 
-        Backend Connection Failed
-
+        <button
+          onClick={() =>
+            setCurrentStep("reporting")
+          }
+          className="px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition"
+        >
+          Continue Anyway
+        </button>
       </div>
-
     );
-
   }
 
-
   return null;
-
 }
