@@ -9,9 +9,9 @@ import { motion } from "framer-motion";
 export default function KPISection({ data }) {
     const kpis = [
         {
-            title: "Victims",
-            value: data?.disaster?.victims ?? "--",
-            icon: <FaUsers />,
+            title: "Traffic Impact",
+            value: data?.disaster?.traffic_impact ?? "Moderate",
+            icon: <FaExclamationTriangle />,
             color: "border-red-500",
         },
         {

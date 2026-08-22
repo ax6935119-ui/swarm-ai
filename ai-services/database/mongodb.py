@@ -18,3 +18,7 @@ client = MongoClient(
 db = client[MONGODB_DATABASE]
 
 disasters_collection = db["disasters"]
+
+# Round 2 collections
+assignments_collection = db["assignments"]
+notifications_collection = db["notifications"]

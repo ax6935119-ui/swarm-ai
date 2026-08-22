@@ -1,0 +1,140 @@
+"""
+SwarmAI — Incident Routes (Round 2)
+
+Exposes disaster_events from MongoDB as /api/incidents endpoints
+so the Admin Dashboard can display the incident queue.
+"""
+
+from fastapi import APIRouter, HTTPException
+
+from shared.memory_manager import MemoryManager
+
+router = APIRouter(prefix="/api", tags=["Incidents"])
+
+
+# ============================================================
+# MEMORY MANAGER (reuse existing)
+# ============================================================
+
+try:
+    _memory = MemoryManager()
+except Exception:
+    _memory = None
+
+
+# ============================================================
+# GET ALL INCIDENTS
+# ============================================================
+
+@router.get("/incidents")
+def get_incidents(limit: int = 50):
+    """
+    Returns the most recent validated incidents
+    from the disaster_events collection.
+    """
+
+    if not _memory:
+        raise HTTPException(
+            status_code=503,
+            detail="Memory manager unavailable."
+        )
+
+    events = _memory.get_memory(limit=limit)
+
+    # Normalise each event for the incident queue
+    incidents = []
+
+    for evt in events:
+
+        incident_id = evt.get("event_id", "")
+
+        severity_num = evt.get("severity", 0)
+
+        if severity_num >= 8:
+            severity_label = "critical"
+        elif severity_num >= 5:
+            severity_label = "high"
+        elif severity_num >= 3:
+            severity_label = "medium"
+        else:
+            severity_label = "low"
+
+        incidents.append({
+            "id":             incident_id,
+            "short_id":       incident_id[:8].upper(),
+            "type":           evt.get("disaster_type") or evt.get("disaster", "Unknown"),
+            "location":       evt.get("location", "Unknown"),
+            "severity":       severity_num,
+            "severityLabel":  severity_label,
+            "status":         evt.get("status", "validated"),
+            "victims":        evt.get("victims") or evt.get("victim_estimate") or 0,
+            "summary":        evt.get("summary", ""),
+            "trafficImpact":  evt.get("traffic_impact", "low"),
+            "medicalImpact":  evt.get("medical_access_impact", "low"),
+            "evacuationRequired": evt.get("evacuation_required", False),
+            "observations":   evt.get("observations", []),
+            "hazards":        evt.get("hazards", []),
+            "infrastructure": evt.get("infrastructure_damage", []),
+            "latitude":       evt.get("latitude"),
+            "longitude":      evt.get("longitude"),
+            "createdAt":      str(evt.get("created_at", "")),
+        })
+
+    return {"incidents": incidents, "total": len(incidents)}
+
+
+# ============================================================
+# GET SINGLE INCIDENT
+# ============================================================
+
+@router.get("/incidents/{event_id}")
+def get_incident(event_id: str):
+    """
+    Returns a single incident by event_id.
+    """
+
+    if not _memory:
+        raise HTTPException(
+            status_code=503,
+            detail="Memory manager unavailable."
+        )
+
+    evt = _memory.get_event(event_id)
+
+    if not evt:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Incident {event_id} not found."
+        )
+
+    severity_num = evt.get("severity", 0)
+
+    if severity_num >= 8:
+        severity_label = "critical"
+    elif severity_num >= 5:
+        severity_label = "high"
+    elif severity_num >= 3:
+        severity_label = "medium"
+    else:
+        severity_label = "low"
+
+    return {
+        "id":             evt.get("event_id", ""),
+        "short_id":       evt.get("event_id", "")[:8].upper(),
+        "type":           evt.get("disaster_type") or evt.get("disaster", "Unknown"),
+        "location":       evt.get("location", "Unknown"),
+        "severity":       severity_num,
+        "severityLabel":  severity_label,
+        "status":         evt.get("status", "validated"),
+        "victims":        evt.get("victims") or evt.get("victim_estimate") or 0,
+        "summary":        evt.get("summary", ""),
+        "trafficImpact":  evt.get("traffic_impact", "low"),
+        "medicalImpact":  evt.get("medical_access_impact", "low"),
+        "evacuationRequired": evt.get("evacuation_required", False),
+        "observations":   evt.get("observations", []),
+        "hazards":        evt.get("hazards", []),
+        "infrastructure": evt.get("infrastructure_damage", []),
+        "latitude":       evt.get("latitude"),
+        "longitude":      evt.get("longitude"),
+        "createdAt":      str(evt.get("created_at", "")),
+    }
