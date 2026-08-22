@@ -749,10 +749,13 @@ async def analyze_disaster(
 
         raise HTTPException(
 
-            status_code=500,
+            status_code=502,
 
-            detail=
-                "AI disaster analysis failed."
+            detail={
+                "message":
+                    "The AI analysis service could not process the request.",
+                "error": str(e)
+            }
 
         )
 

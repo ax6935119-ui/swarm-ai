@@ -7,3 +7,4 @@ langgraph
 networkx
 pymongo
 python-multipart
+Pillow
