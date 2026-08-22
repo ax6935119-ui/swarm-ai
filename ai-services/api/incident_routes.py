@@ -46,6 +46,12 @@ def get_incidents(limit: int = 50):
 
     for evt in events:
 
+        # Only validated incidents appear in the queue
+        status_val = str(evt.get("status", "")).lower()
+        v_status = str(evt.get("validationStatus", "")).upper()
+        if status_val == "validation_failed" or v_status == "VALIDATION_FAILED":
+            continue
+
         incident_id = evt.get("event_id", "")
 
         severity_num = evt.get("severity", 0)
@@ -60,24 +66,28 @@ def get_incidents(limit: int = 50):
             severity_label = "low"
 
         incidents.append({
-            "id":             incident_id,
-            "short_id":       incident_id[:8].upper(),
-            "type":           evt.get("disaster_type") or evt.get("disaster", "Unknown"),
-            "location":       evt.get("location", "Unknown"),
-            "severity":       severity_num,
-            "severityLabel":  severity_label,
-            "status":         evt.get("status", "validated"),
-            "victims":        evt.get("victims") or evt.get("victim_estimate") or 0,
-            "summary":        evt.get("summary", ""),
-            "trafficImpact":  evt.get("traffic_impact", "low"),
-            "medicalImpact":  evt.get("medical_access_impact", "low"),
+            "id":                 incident_id,
+            "short_id":           incident_id[:8].upper() if incident_id else "",
+            "type":               evt.get("disaster_type") or evt.get("disaster", "Unknown"),
+            "location":           evt.get("location", "Unknown"),
+            "description":        evt.get("description", ""),
+            "imageUrl":           evt.get("imageUrl") or evt.get("image_url") or "",
+            "severity":           severity_num,
+            "severityLabel":      severity_label,
+            "status":             evt.get("status", "validated"),
+            "validationStatus":   evt.get("validationStatus", "VALIDATED"),
+            "validatedAt":        str(evt.get("validatedAt") or evt.get("created_at", "")),
+            "victims":            evt.get("victims") or evt.get("victim_estimate") or 0,
+            "summary":            evt.get("summary", ""),
+            "trafficImpact":      evt.get("traffic_impact", "low"),
+            "medicalImpact":      evt.get("medical_access_impact", "low"),
             "evacuationRequired": evt.get("evacuation_required", False),
-            "observations":   evt.get("observations", []),
-            "hazards":        evt.get("hazards", []),
-            "infrastructure": evt.get("infrastructure_damage", []),
-            "latitude":       evt.get("latitude"),
-            "longitude":      evt.get("longitude"),
-            "createdAt":      str(evt.get("created_at", "")),
+            "observations":       evt.get("observations", []),
+            "hazards":            evt.get("hazards", []),
+            "infrastructure":     evt.get("infrastructure_damage", []),
+            "latitude":           evt.get("latitude"),
+            "longitude":          evt.get("longitude"),
+            "createdAt":          str(evt.get("created_at", "")),
         })
 
     return {"incidents": incidents, "total": len(incidents)}
@@ -119,22 +129,27 @@ def get_incident(event_id: str):
         severity_label = "low"
 
     return {
-        "id":             evt.get("event_id", ""),
-        "short_id":       evt.get("event_id", "")[:8].upper(),
-        "type":           evt.get("disaster_type") or evt.get("disaster", "Unknown"),
-        "location":       evt.get("location", "Unknown"),
-        "severity":       severity_num,
-        "severityLabel":  severity_label,
-        "status":         evt.get("status", "validated"),
-        "victims":        evt.get("victims") or evt.get("victim_estimate") or 0,
-        "summary":        evt.get("summary", ""),
-        "trafficImpact":  evt.get("traffic_impact", "low"),
-        "medicalImpact":  evt.get("medical_access_impact", "low"),
+        "id":                 evt.get("event_id", ""),
+        "short_id":           evt.get("event_id", "")[:8].upper() if evt.get("event_id") else "",
+        "type":               evt.get("disaster_type") or evt.get("disaster", "Unknown"),
+        "location":           evt.get("location", "Unknown"),
+        "description":        evt.get("description", ""),
+        "imageUrl":           evt.get("imageUrl") or evt.get("image_url") or "",
+        "severity":           severity_num,
+        "severityLabel":      severity_label,
+        "status":             evt.get("status", "validated"),
+        "validationStatus":   evt.get("validationStatus", "VALIDATED"),
+        "validatedAt":        str(evt.get("validatedAt") or evt.get("created_at", "")),
+        "victims":            evt.get("victims") or evt.get("victim_estimate") or 0,
+        "summary":            evt.get("summary", ""),
+        "trafficImpact":      evt.get("traffic_impact", "low"),
+        "medicalImpact":      evt.get("medical_access_impact", "low"),
         "evacuationRequired": evt.get("evacuation_required", False),
-        "observations":   evt.get("observations", []),
-        "hazards":        evt.get("hazards", []),
-        "infrastructure": evt.get("infrastructure_damage", []),
-        "latitude":       evt.get("latitude"),
-        "longitude":      evt.get("longitude"),
-        "createdAt":      str(evt.get("created_at", "")),
+        "observations":       evt.get("observations", []),
+        "hazards":            evt.get("hazards", []),
+        "infrastructure":     evt.get("infrastructure_damage", []),
+        "latitude":           evt.get("latitude"),
+        "longitude":          evt.get("longitude"),
+        "createdAt":          str(evt.get("created_at", "")),
     }
+

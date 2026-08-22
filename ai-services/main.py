@@ -75,6 +75,12 @@ from api.delegation_routes import (
     router as delegation_router
 )
 
+from api.auth_routes import (
+    router as auth_router
+)
+
+from database.mongodb import init_indexes
+
 
 
 # ============================================================
@@ -246,6 +252,20 @@ app.include_router(
 app.include_router(incident_router)
 app.include_router(notification_router)
 app.include_router(delegation_router)
+app.include_router(auth_router)
+app.include_router(auth_router, prefix="")
+
+
+# ============================================================
+# STATIC FILES FOR EVIDENCE UPLOADS
+# ============================================================
+
+from fastapi.staticfiles import StaticFiles
+
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 
 # ============================================================
@@ -254,6 +274,8 @@ app.include_router(delegation_router)
 
 @app.on_event("startup")
 async def startup_event():
+
+    init_indexes()
 
     print("\n" + "=" * 70)
 

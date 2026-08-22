@@ -1,8 +1,12 @@
 
+import os
+import io
 import uuid
 import json
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
+from PIL import Image
 
 from fastapi import (
     APIRouter,
@@ -28,6 +32,10 @@ from orchestrator.langgraph_orchestrator import (
 
 
 router = APIRouter()
+
+UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
 
 
 # ============================================================
@@ -297,6 +305,10 @@ async def analyze_disaster(
 
     description: str = Form(""),
 
+    disaster_type: str = Form(None),
+
+    disasterType: str = Form(None),
+
     images: list[UploadFile] = File(...)
 
 ):
@@ -309,6 +321,13 @@ async def analyze_disaster(
     )
 
     print("=" * 70)
+
+
+    # ========================================================
+    # PRE-GENERATE EVENT ID
+    # ========================================================
+
+    event_id = str(uuid.uuid4())
 
 
     # ========================================================
@@ -333,14 +352,19 @@ async def analyze_disaster(
 
 
     # ========================================================
-    # DESCRIPTION
+    # DESCRIPTION & DISASTER TYPE
     # ========================================================
 
     description = description.strip()
 
+    user_disaster_type = (disaster_type or disasterType or "").strip()
+
     print(
         f"📝 Description: {description}"
     )
+
+    if user_disaster_type:
+        print(f"🏷️ User Selected Disaster Type: {user_disaster_type}")
 
 
     # ========================================================
@@ -364,7 +388,7 @@ async def analyze_disaster(
 
 
     # ========================================================
-    # READ AND VALIDATE IMAGES
+    # READ AND VALIDATE IMAGES (Standard file & decode integrity)
     # ========================================================
 
     prepared_images = []
@@ -433,7 +457,7 @@ async def analyze_disaster(
                     False,
 
                 "reason":
-                    "Unsupported image format."
+                    "Unsupported image format. Please upload JPG, PNG, or WEBP."
 
             })
 
@@ -525,6 +549,42 @@ async def analyze_disaster(
 
 
         # ----------------------------------------------------
+        # DECODE INTEGRITY CHECK (PIL)
+        # ----------------------------------------------------
+
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as pil_img:
+                pil_img.verify()
+        except Exception as decode_err:
+            print("❌ IMAGE DECODE ERROR:", decode_err)
+            upload_validation.append({
+                "image_index": index,
+                "filename": filename,
+                "accepted": False,
+                "reason": "Corrupted image file. Please upload a valid image (JPG, PNG, or WEBP)."
+            })
+            continue
+
+
+        # ----------------------------------------------------
+        # SAVE EVIDENCE IMAGE TO DISK
+        # ----------------------------------------------------
+
+        file_ext = os.path.splitext(filename)[1].lower() or ".jpg"
+        saved_filename = f"incident_{event_id[:8]}_{index}{file_ext}"
+        saved_path = os.path.join(UPLOADS_DIR, saved_filename)
+
+        try:
+            with open(saved_path, "wb") as f_out:
+                f_out.write(image_bytes)
+            image_url = f"/uploads/{saved_filename}"
+            print(f"💾 Saved evidence image: {saved_path} -> {image_url}")
+        except Exception as save_err:
+            print("⚠️ Failed to save image to uploads:", save_err)
+            image_url = ""
+
+
+        # ----------------------------------------------------
         # VALID IMAGE
         # ----------------------------------------------------
 
@@ -552,7 +612,10 @@ async def analyze_disaster(
                 content_type,
 
             "image_bytes":
-                image_bytes
+                image_bytes,
+
+            "image_url":
+                image_url,
 
         })
 
@@ -567,8 +630,11 @@ async def analyze_disaster(
             "accepted":
                 True,
 
+            "image_url":
+                image_url,
+
             "reason":
-                "Passed file validation."
+                "Passed file and integrity validation."
 
         })
 
@@ -586,7 +652,7 @@ async def analyze_disaster(
             detail={
 
                 "message":
-                    "No valid images were uploaded.",
+                    "Please upload a valid image (JPG, PNG, or WEBP).",
 
                 "images":
                     upload_validation
@@ -596,113 +662,21 @@ async def analyze_disaster(
         )
 
 
-    # ========================================================
-    # LIGHTWEIGHT IMAGE VALIDATION
-    # ========================================================
-
-    print("\n")
-    print("=" * 70)
+    # Evidence images are validated
+    valid_images = prepared_images
+    rejected_images = [img for img in upload_validation if not img.get("accepted")]
 
     print(
-        "🔍 STARTING DISASTER IMAGE VALIDATION"
-    )
-
-    print("=" * 70)
-
-
-    try:
-
-        validation_result = (
-
-            await validate_disaster_images(
-
-                images=prepared_images
-
-            )
-
-        )
-
-    except Exception as e:
-
-        print(
-            "\n❌ IMAGE VALIDATOR FAILED"
-        )
-
-        print(
-            "Error:",
-            e
-        )
-
-        raise HTTPException(
-
-            status_code=500,
-
-            detail=
-                "Image validation service failed."
-
-        )
-
-
-    # ========================================================
-    # EXTRACT VALID / REJECTED IMAGES
-    # ========================================================
-
-    valid_images = validation_result.get(
-
-        "valid_images",
-
-        []
-
-    )
-
-    rejected_images = validation_result.get(
-
-        "rejected_images",
-
-        []
-
-    )
-
-
-    print(
-        f"\n✅ Disaster-related images: "
+        f"\n✅ Valid disaster evidence images: "
         f"{len(valid_images)}"
     )
 
-    print(
-        f"❌ Rejected images: "
-        f"{len(rejected_images)}"
-    )
-
-
-    # ========================================================
-    # STOP IF ALL IMAGES ARE REJECTED
-    # ========================================================
-
-    if not valid_images:
-
-        raise HTTPException(
-
-            status_code=422,
-
-            detail={
-
-                "message":
-                    "None of the uploaded images appear "
-                    "to be related to a disaster or emergency.",
-
-                "total_images":
-                    len(images),
-
-                "valid_images":
-                    0,
-
-                "rejected_images":
-                    rejected_images
-
-            }
-
+    if rejected_images:
+        print(
+            f"❌ Rejected images: "
+            f"{len(rejected_images)}"
         )
+
 
 
     # ========================================================
@@ -827,19 +801,10 @@ async def analyze_disaster(
 
 
     # ========================================================
-    # EVENT ID
-    # ========================================================
-
-    event_id = str(
-        uuid.uuid4()
-    )
-
-
-    # ========================================================
     # NORMALIZE AI DATA
     # ========================================================
 
-    disaster_type = analysis.get(
+    disaster_type = user_disaster_type or analysis.get(
 
         "disaster_type",
 
@@ -904,6 +869,8 @@ async def analyze_disaster(
 
     )
 
+    primary_image_url = prepared_images[0].get("image_url", "") if prepared_images else ""
+
 
     # ========================================================
     # EVENT
@@ -931,6 +898,18 @@ async def analyze_disaster(
 
         "confidence":
             confidence,
+
+        "imageUrl":
+            primary_image_url,
+
+        "image_url":
+            primary_image_url,
+
+        "validationStatus":
+            "VALIDATED",
+
+        "validatedAt":
+            datetime.now(timezone.utc).isoformat(),
 
         "observations":
 
@@ -1041,7 +1020,7 @@ async def analyze_disaster(
             longitude,
 
         "status":
-            "analyzed"
+            "validated"
 
     }
 
