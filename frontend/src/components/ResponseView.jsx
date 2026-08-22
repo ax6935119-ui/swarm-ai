@@ -157,14 +157,13 @@ export default function ResponseView({ data, onReset, userLocation = null }) {
               </div>
             )}
 
-            {/* Estimated Victims */}
+            {/* Traffic Impact */}
             <div className="px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs font-bold">
-              <p className="text-[10px] text-slate-400 font-normal uppercase tracking-wider flex items-center gap-1">
-                <FaUsers className="text-slate-400" />
-                <span>Estimated Affected</span>
+              <p className="text-[10px] text-slate-400 font-normal uppercase tracking-wider">
+                Traffic Impact
               </p>
-              <p className="text-base font-extrabold text-white mt-0.5">
-                {victimEstimate !== null ? `${victimEstimate} individuals` : "Not estimated"}
+              <p className="text-base font-extrabold text-white uppercase mt-0.5">
+                {trafficImpact}
               </p>
             </div>
           </div>

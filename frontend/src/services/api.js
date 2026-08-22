@@ -12,4 +12,13 @@ const API = axios.create({
   },
 });
 
+// Attach Authorization header if token exists in localStorage
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem("swarmai_admin_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export default API;

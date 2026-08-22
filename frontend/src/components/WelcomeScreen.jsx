@@ -122,7 +122,7 @@ export default function WelcomeScreen({ onBegin, onAdmin }) {
         </motion.div>
 
         {/* Primary BEGIN Action */}
-        <motion.div variants={itemVariants} className="mt-10 flex flex-col sm:flex-row gap-3 items-center">
+        <motion.div variants={itemVariants} className="mt-10 flex flex-col items-center">
           <motion.button
             type="button"
             onClick={onBegin}
@@ -130,22 +130,9 @@ export default function WelcomeScreen({ onBegin, onAdmin }) {
             whileTap={{ scale: 0.98 }}
             className="px-10 py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg shadow-red-950/60 transition-colors duration-200 flex items-center gap-3 text-base tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 focus:ring-offset-slate-950"
           >
-            <span>BEGIN</span>
+            <span>BEGIN EMERGENCY REPORT</span>
             <FaArrowRight className="text-sm" />
           </motion.button>
-
-          {onAdmin && (
-            <motion.button
-              type="button"
-              onClick={onAdmin}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
-              className="px-8 py-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl transition-colors duration-200 flex items-center gap-3 text-base tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-slate-950"
-            >
-              <FaUserShield className="text-sm" />
-              <span>Admin Dashboard</span>
-            </motion.button>
-          )}
         </motion.div>
       </motion.main>
 

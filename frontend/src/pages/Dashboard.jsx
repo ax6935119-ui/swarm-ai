@@ -8,11 +8,19 @@ import AnalysisScreen from "../components/AnalysisScreen";
 import ResponseView from "../components/ResponseView";
 import IncidentQueue from "../components/IncidentQueue";
 import AdminCommandCenter from "../components/AdminCommandCenter";
+import AdminLogin from "../components/AdminLogin";
 
 import useDashboardData from "../hooks/useDashboardData";
 import useGeolocation from "../hooks/useGeolocation";
+import { getAdminSession, logoutAdmin } from "../services/adminService";
 
 export default function Dashboard() {
+  // ============================================================
+  // ADMIN AUTHENTICATION STATE
+  // ============================================================
+
+  const [adminSession, setAdminSession] = useState(() => getAdminSession());
+
   // ============================================================
   // DASHBOARD / BACKEND STATE
   // ============================================================
@@ -52,7 +60,7 @@ export default function Dashboard() {
   };
 
   // ============================================================
-  // SCREEN STATE
+  // SCREEN & ROUTE STATE
   // ============================================================
 
   const [currentStep, setCurrentStep] = useState("welcome");
@@ -62,10 +70,64 @@ export default function Dashboard() {
   // reporting
   // analyzing
   // response
-  // admin          ← new: incident queue
-  // admin-incident ← new: command center for a specific incident
+  // admin          ← Incident Queue (protected)
+  // admin-incident ← Incident Command Center (protected)
 
   const [adminIncident, setAdminIncident] = useState(null);
+
+  // Synchronize route with URL (/admin or #/admin)
+  useEffect(() => {
+    const syncRouteFromURL = () => {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+
+      if (
+        path === "/admin" ||
+        path === "/admin/" ||
+        path.startsWith("/admin/") ||
+        hash === "#/admin" ||
+        hash === "#admin"
+      ) {
+        setCurrentStep("admin");
+      }
+    };
+
+    syncRouteFromURL();
+
+    window.addEventListener("popstate", syncRouteFromURL);
+    window.addEventListener("hashchange", syncRouteFromURL);
+
+    return () => {
+      window.removeEventListener("popstate", syncRouteFromURL);
+      window.removeEventListener("hashchange", syncRouteFromURL);
+    };
+  }, []);
+
+  const navigateToHome = () => {
+    try {
+      window.history.pushState(null, "", "/");
+    } catch {
+      window.location.hash = "";
+    }
+    setCurrentStep("welcome");
+  };
+
+  const handleLoginSuccess = () => {
+    setAdminSession(getAdminSession());
+    setCurrentStep("admin");
+  };
+
+  const handleLogout = () => {
+    logoutAdmin();
+    setAdminSession(null);
+    setAdminIncident(null);
+    try {
+      window.history.pushState(null, "", "/");
+    } catch {
+      window.location.hash = "";
+    }
+    setCurrentStep("welcome");
+  };
 
   // ============================================================
   // DISASTER STATE
@@ -142,6 +204,17 @@ export default function Dashboard() {
         "description",
         input.description?.trim() || ""
       );
+
+      if (input.disasterType) {
+        formData.append(
+          "disaster_type",
+          input.disasterType
+        );
+        formData.append(
+          "disasterType",
+          input.disasterType
+        );
+      }
 
       // Backend expects:
       // images: list[UploadFile]
@@ -320,6 +393,66 @@ export default function Dashboard() {
   };
 
   // ============================================================
+  // ADMIN PORTAL (PROTECTED)
+  // ============================================================
+
+  if (currentStep === "admin" || currentStep === "admin-incident") {
+    // If unauthenticated -> show login
+    if (!adminSession) {
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+          <Navbar onHome={navigateToHome} />
+          <main className="flex-1 flex flex-col justify-center">
+            <AdminLogin
+              onLoginSuccess={handleLoginSuccess}
+              onBackToCitizen={navigateToHome}
+            />
+          </main>
+        </div>
+      );
+    }
+
+    // If authenticated -> show Command Center or Queue
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <Navbar
+          isAdminAuthenticated={true}
+          onLogout={handleLogout}
+          onHome={navigateToHome}
+        />
+
+        <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-8">
+          {currentStep === "admin-incident" && adminIncident ? (
+            <AdminCommandCenter
+              incident={adminIncident}
+              onBack={() => setCurrentStep("admin")}
+            />
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={navigateToHome}
+                  className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition font-mono uppercase tracking-wider cursor-pointer"
+                >
+                  ← Citizen Emergency Portal
+                </button>
+              </div>
+
+              <IncidentQueue
+                onOpenIncident={(incident) => {
+                  setAdminIncident(incident);
+                  setCurrentStep("admin-incident");
+                }}
+              />
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  // ============================================================
   // WELCOME SCREEN
   // ============================================================
 
@@ -329,7 +462,6 @@ export default function Dashboard() {
         onBegin={() =>
           setCurrentStep("reporting")
         }
-        onAdmin={() => setCurrentStep("admin")}
       />
     );
   }
@@ -341,7 +473,11 @@ export default function Dashboard() {
   if (currentStep === "analyzing") {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar onAdmin={() => setCurrentStep("admin")} />
+        <Navbar
+          isAdminAuthenticated={!!adminSession}
+          onLogout={handleLogout}
+          onHome={navigateToHome}
+        />
 
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center">
           <AnalysisScreen
@@ -364,7 +500,11 @@ export default function Dashboard() {
   ) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar onAdmin={() => setCurrentStep("admin")} />
+        <Navbar
+          isAdminAuthenticated={!!adminSession}
+          onLogout={handleLogout}
+          onHome={navigateToHome}
+        />
 
         <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-8">
           <ResponseView
@@ -378,62 +518,17 @@ export default function Dashboard() {
   }
 
   // ============================================================
-  // ADMIN — INCIDENT QUEUE
-  // ============================================================
-
-  if (currentStep === "admin") {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar onAdmin={() => setCurrentStep("admin")} />
-
-        <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-8">
-          <div className="mb-6">
-            <button
-              type="button"
-              onClick={() => setCurrentStep("welcome")}
-              className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition font-mono uppercase tracking-wider cursor-pointer"
-            >
-              ← Back to Home
-            </button>
-          </div>
-          <IncidentQueue
-            onOpenIncident={(incident) => {
-              setAdminIncident(incident);
-              setCurrentStep("admin-incident");
-            }}
-          />
-        </main>
-      </div>
-    );
-  }
-
-  // ============================================================
-  // ADMIN — INCIDENT COMMAND CENTER
-  // ============================================================
-
-  if (currentStep === "admin-incident" && adminIncident) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar onAdmin={() => setCurrentStep("admin")} />
-
-        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8">
-          <AdminCommandCenter
-            incident={adminIncident}
-            onBack={() => setCurrentStep("admin")}
-          />
-        </main>
-      </div>
-    );
-  }
-
-  // ============================================================
   // REPORTING SCREEN
   // ============================================================
 
   if (currentStep === "reporting") {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar onAdmin={() => setCurrentStep("admin")} />
+        <Navbar
+          isAdminAuthenticated={!!adminSession}
+          onLogout={handleLogout}
+          onHome={navigateToHome}
+        />
 
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center">
           <DisasterInputPanel

@@ -58,11 +58,11 @@ export default function DisasterPanel({
 
                 <div>
                     <p className="text-sm text-slate-500">
-                        Victims
+                        Traffic Impact
                     </p>
 
-                    <p className="font-semibold">
-                        {disaster.victims}
+                    <p className="font-semibold uppercase">
+                        {disaster.traffic_impact || disaster.traffic || "Moderate"}
                     </p>
                 </div>
 

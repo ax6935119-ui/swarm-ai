@@ -31,6 +31,10 @@ export default function DisasterInputPanel({
   // STATE
   // ============================================================
 
+  const [disasterType, setDisasterType] = useState(
+    initialValues?.disasterType || "Flood"
+  );
+
   const [location, setLocation] = useState(
     initialValues?.location || ""
   );
@@ -89,6 +93,10 @@ export default function DisasterInputPanel({
   // ============================================================
 
   useEffect(() => {
+
+    if (initialValues?.disasterType !== undefined) {
+      setDisasterType(initialValues.disasterType || "Flood");
+    }
 
     if (initialValues?.location !== undefined) {
       setLocation(initialValues.location || "");
@@ -864,6 +872,7 @@ export default function DisasterInputPanel({
 
 
     onAnalyze({
+      disasterType: disasterType,
       location: trimmedLocation,
       description: description.trim(),
       images: images,
@@ -1179,6 +1188,40 @@ export default function DisasterInputPanel({
               </p>
 
             )}
+
+          </div>
+
+
+          {/* ================================================== */}
+          {/* DISASTER TYPE */}
+          {/* ================================================== */}
+
+          <div className="space-y-2">
+
+            <label
+              htmlFor="disaster-type"
+              className="text-sm font-semibold text-slate-200 flex items-center gap-2"
+            >
+              <span>Disaster Type</span>
+            </label>
+
+            <select
+              id="disaster-type"
+              value={disasterType}
+              onChange={(event) => setDisasterType(event.target.value)}
+              disabled={loading}
+              className="w-full px-4 py-3.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-700/50 cursor-pointer"
+            >
+              <option value="Flood">Flood</option>
+              <option value="Building Fire">Building Fire</option>
+              <option value="Wildfire">Wildfire</option>
+              <option value="Earthquake">Earthquake</option>
+              <option value="Landslide">Landslide</option>
+              <option value="Severe Storm">Severe Storm</option>
+              <option value="Road Accident">Road Accident</option>
+              <option value="Structural Damage">Structural Damage / Collapse</option>
+              <option value="Other Emergency">Other Emergency</option>
+            </select>
 
           </div>
 

@@ -128,6 +128,23 @@ export default function IncidentQueue({ onOpenIncident }) {
               <SeverityBadge label={incident.severityLabel} />
             </div>
 
+            {/* Evidence Thumbnail (if available) */}
+            {incident.imageUrl && (
+              <div className="mb-3 h-28 w-full rounded-xl overflow-hidden bg-slate-950 border border-slate-800 relative">
+                <img
+                  src={incident.imageUrl.startsWith("http") ? incident.imageUrl : `http://127.0.0.1:8000${incident.imageUrl}`}
+                  alt=""
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  onError={(e) => {
+                    e.target.parentElement.style.display = "none";
+                  }}
+                />
+                <span className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-black/70 backdrop-blur-sm text-[9px] font-mono text-emerald-300 border border-emerald-500/30">
+                  📸 Evidence
+                </span>
+              </div>
+            )}
+
             {/* Location */}
             <p className="text-xs text-slate-400 flex items-center gap-1.5 mb-3">
               <FaMapMarkerAlt className="text-red-500 shrink-0" />
@@ -146,11 +163,11 @@ export default function IncidentQueue({ onOpenIncident }) {
                 </p>
               </div>
               <div className="bg-slate-950/60 rounded-xl p-2.5 text-center border border-slate-800">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider flex items-center justify-center gap-1">
-                  <FaUsers className="text-[8px]" /> Victims
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                  Traffic Impact
                 </p>
-                <p className="text-lg font-extrabold text-white">
-                  {incident.victims || "?"}
+                <p className="text-sm font-bold text-slate-200 uppercase mt-1">
+                  {incident.traffic_impact || incident.trafficImpact || "Moderate"}
                 </p>
               </div>
             </div>

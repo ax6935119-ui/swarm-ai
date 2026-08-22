@@ -64,8 +64,46 @@ function IncidentDetailsTab({ incident }) {
   const hazards        = incident.hazards || [];
   const infrastructure = incident.infrastructure || [];
 
+  const backendBase = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
+  const imageUrl = incident.imageUrl
+    ? (incident.imageUrl.startsWith("http") ? incident.imageUrl : `${backendBase}${incident.imageUrl}`)
+    : null;
+
   return (
     <div className="space-y-5">
+      {/* Evidence Image Card (if uploaded) */}
+      {imageUrl && (
+        <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-400 font-mono uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Verified Disaster Evidence Photo
+            </p>
+            <span className="px-2.5 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-[11px] font-bold">
+              Attached Evidence
+            </span>
+          </div>
+          <div className="relative rounded-xl overflow-hidden border border-slate-700 bg-slate-900 max-h-80 flex items-center justify-center">
+            <img
+              src={imageUrl}
+              alt={`Evidence for ${incident.type}`}
+              className="w-full h-full max-h-80 object-cover hover:scale-105 transition-transform duration-300"
+              onError={(e) => {
+                e.target.style.display = "none";
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* User Description (if provided) */}
+      {incident.description && (
+        <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5">
+          <p className="text-xs text-slate-500 font-mono uppercase tracking-wider mb-2">User-Reported Description</p>
+          <p className="text-sm text-slate-200 italic leading-relaxed">"{incident.description}"</p>
+        </div>
+      )}
+
       {/* Overview */}
       <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
         <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-slate-800">
@@ -96,17 +134,6 @@ function IncidentDetailsTab({ incident }) {
         <div>
           <p className="text-xs text-slate-500 font-mono uppercase tracking-wider mb-2">Severity Rating</p>
           <SeverityBar value={incident.severity || 0} />
-        </div>
-
-        {/* Victims */}
-        <div className="flex items-center gap-2 text-sm">
-          <FaUsers className="text-slate-400 shrink-0" />
-          <span className="text-slate-300">
-            Estimated Victims:{" "}
-            <span className="text-white font-bold">
-              {incident.victims || "Not estimated"}
-            </span>
-          </span>
         </div>
 
         {/* Evacuation */}
@@ -239,9 +266,13 @@ export default function AdminCommandCenter({ incident, onBack }) {
             {incident?.status || "validated"}
           </span>
           <span className="text-xs text-slate-500 font-mono">
-            Severity {incident?.severity}/10 ·{" "}
-            {incident?.victims || 0} estimated victims
+            Severity: {incident?.severity}/10
           </span>
+          {incident?.disaster_type && (
+            <span className="text-xs text-slate-500 font-mono">
+              · Type: {incident.disaster_type}
+            </span>
+          )}
         </div>
       </div>
 

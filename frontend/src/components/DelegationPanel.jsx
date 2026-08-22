@@ -249,7 +249,7 @@ export default function DelegationPanel({ incident }) {
             rows={2}
             value={task}
             onChange={(e) => setTask(e.target.value)}
-            placeholder="e.g. Rescue victims from Zone A and establish fire perimeter."
+            placeholder="e.g. Secure perimeter and coordinate emergency response in Zone A."
             className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder:text-slate-600 resize-none focus:outline-none focus:ring-1 focus:ring-red-500/50"
           />
         </div>

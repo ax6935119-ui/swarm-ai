@@ -16,8 +16,8 @@ export default function StatsCards({
     },
 
     {
-      title: "Victims",
-      value: stats.victims
+      title: "Status",
+      value: stats.status || "Active"
     },
 
     {
