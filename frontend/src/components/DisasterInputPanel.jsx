@@ -15,6 +15,7 @@ import {
   FaImages,
   FaTimes,
 } from "react-icons/fa";
+import useGeolocation from "../hooks/useGeolocation";
 
 
 export default function DisasterInputPanel({
@@ -22,6 +23,7 @@ export default function DisasterInputPanel({
   loading = false,
   apiError = null,
   initialValues = null,
+  onLocationDetected = null,
 }) {
 
   // ============================================================
@@ -74,6 +76,83 @@ export default function DisasterInputPanel({
   // INITIAL VALUES UPDATE
   // ============================================================
 
+<<<<<<< HEAD
+=======
+  const { coords, error: geoError, loading: geoLoading, refetch: getGeoLocation } = useGeolocation({ auto: false });
+  const [geoLocating, setGeoLocating] = useState(false);
+  const [geoAlert, setGeoAlert] = useState(null);
+
+  const reverseGeocode = async (lat, lng) => {
+    setGeoLocating(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            "Accept-Language": "en",
+            "User-Agent": "SwarmAI-Disaster-System",
+          },
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to resolve address from coordinates.");
+      }
+      const data = await response.json();
+      const displayName = data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      setLocation(displayName);
+      
+      if (errors.location) {
+        setErrors((prev) => {
+          const next = { ...prev };
+          delete next.location;
+          return next;
+        });
+      }
+
+      if (onLocationDetected) {
+        onLocationDetected({
+          lat,
+          lng,
+          address: displayName,
+        });
+      }
+    } catch (err) {
+      console.error("Reverse geocoding error:", err);
+      const coordStr = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      setLocation(coordStr);
+      if (onLocationDetected) {
+        onLocationDetected({
+          lat,
+          lng,
+          address: coordStr,
+        });
+      }
+    } finally {
+      setGeoLocating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!geoLocating) return;
+
+    if (coords) {
+      setGeoLocating(false);
+      reverseGeocode(coords.lat, coords.lng);
+    } else if (geoError) {
+      setGeoLocating(false);
+      setGeoAlert(geoError);
+    }
+  }, [coords, geoError, geoLocating]);
+
+  const handleUseMyLocation = () => {
+    if (loading) return;
+    setGeoLocating(true);
+    setGeoAlert(null);
+    getGeoLocation();
+  };
+
+  // Manage preview URL cleanup
+>>>>>>> c7cbde1def9521c6ab760e626a1c3d0f22202c5b
   useEffect(() => {
 
     if (initialValues?.location !== undefined) {
@@ -1178,6 +1257,7 @@ export default function DisasterInputPanel({
       </div>
 
 
+<<<<<<< HEAD
       {/* ====================================================== */}
       {/* FORM */}
       {/* ====================================================== */}
@@ -1237,6 +1317,87 @@ export default function DisasterInputPanel({
 
             </div>
 
+=======
+        <form onSubmit={handleSubmit} className="space-y-7" noValidate>
+          {/* FIELD 1: LOCATION */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="disaster-location"
+                className="text-sm font-semibold text-slate-200 flex items-center gap-2"
+              >
+                <FaMapMarkerAlt className="text-red-500 text-xs" />
+                <span>Incident Location</span>
+                <span className="text-xs text-red-400 font-normal">*Required</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleUseMyLocation}
+                disabled={loading || geoLocating}
+                className="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 bg-blue-950/40 border border-blue-800/50 hover:bg-blue-900/30 px-2.5 py-1.5 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {geoLocating ? (
+                  <>
+                    <FaSpinner className="animate-spin text-[10px]" />
+                    <span>Locating...</span>
+                  </>
+                ) : (
+                  <>
+                    <FaMapMarkerAlt className="text-[10px]" />
+                    <span>Use My Location</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              City, district, landmark, or street address for geolocation and route calculation.
+            </p>
+
+            <input
+              id="disaster-location"
+              type="text"
+              value={location}
+              onChange={(e) => {
+                setLocation(e.target.value);
+                if (errors.location) {
+                  setErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.location;
+                    return next;
+                  });
+                }
+              }}
+              disabled={loading}
+              placeholder="e.g. Pune, Maharashtra or Downtown Riverfront"
+              className={`
+                w-full px-4 py-3.5 rounded-xl bg-slate-900 border text-slate-100 text-sm placeholder:text-slate-500
+                focus:outline-none focus:ring-2 transition duration-200
+                ${
+                  errors.location
+                    ? "border-red-500 focus:ring-red-500/50"
+                    : "border-slate-800 focus:border-slate-600 focus:ring-slate-700/50"
+                }
+                ${loading ? "opacity-60 cursor-not-allowed" : ""}
+              `}
+              aria-required="true"
+              aria-invalid={errors.location ? "true" : "false"}
+            />
+
+            {errors.location && (
+              <p className="text-xs text-red-400 flex items-center gap-1.5 pt-1">
+                <FaExclamationCircle className="shrink-0" />
+                <span>{errors.location}</span>
+              </p>
+            )}
+
+            {geoAlert && (
+              <p className="text-xs text-amber-400 flex items-center gap-1.5 pt-1">
+                <FaExclamationCircle className="shrink-0" />
+                <span>{geoAlert}</span>
+              </p>
+            )}
+>>>>>>> c7cbde1def9521c6ab760e626a1c3d0f22202c5b
           </div>
 
         )}

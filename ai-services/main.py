@@ -1,5 +1,13 @@
 
 import os
+import sys
+
+# Force UTF-8 output so emoji in print() calls don't crash
+# on Windows terminals that default to cp1252.
+if sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr.encoding != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8")
 
 from dotenv import load_dotenv
 

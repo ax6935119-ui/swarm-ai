@@ -7,7 +7,7 @@ import {
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-export default function MapDashboard({ data }) {
+export default function MapDashboard({ data, userLocation = null }) {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
 
@@ -20,6 +20,10 @@ export default function MapDashboard({ data }) {
   const ambulanceIntervalRef = useRef(null);
 
   const routeDataRef = useRef(null);
+
+  // Live user location marker
+  const userLocationMarkerRef = useRef(null);
+  const userLocationCenteredRef = useRef(false);
 
   const MAPTILER_KEY =
     import.meta.env.VITE_MAPTILER_KEY;
@@ -282,12 +286,183 @@ export default function MapDashboard({ data }) {
           null;
       }
 
+      if (
+        userLocationMarkerRef.current
+      ) {
+        userLocationMarkerRef.current.remove();
+        userLocationMarkerRef.current = null;
+      }
+
       map.remove();
 
       mapRef.current =
         null;
     };
   }, []);
+
+  // =========================================================
+  // INJECT PULSING STYLE FOR USER LOCATION MARKER
+  // =========================================================
+
+  const injectUserLocationStyles =
+    useCallback(() => {
+      if (
+        document.getElementById(
+          "swarmai-user-location-style"
+        )
+      ) {
+        return;
+      }
+
+      const style =
+        document.createElement("style");
+
+      style.id =
+        "swarmai-user-location-style";
+
+      style.textContent = `
+        @keyframes swarm-pulse {
+          0%   { transform: scale(1);   opacity: 0.9; }
+          50%  { transform: scale(1.6); opacity: 0.3; }
+          100% { transform: scale(1);   opacity: 0.9; }
+        }
+        .swarmai-user-dot-ring {
+          animation: swarm-pulse 2s ease-in-out infinite;
+        }
+      `;
+
+      document.head.appendChild(style);
+    }, []);
+
+  // =========================================================
+  // CREATE / UPDATE USER LOCATION MARKER
+  // =========================================================
+
+  const createUserLocationMarker =
+    useCallback(
+      (map, lat, lng) => {
+        // Move existing marker if already placed
+        if (userLocationMarkerRef.current) {
+          userLocationMarkerRef.current
+            .setLngLat([lng, lat]);
+          return;
+        }
+
+        injectUserLocationStyles();
+
+        // Outer pulsing ring
+        const el =
+          document.createElement("div");
+
+        el.style.cssText = `
+          position: relative;
+          width: 42px;
+          height: 42px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: default;
+        `;
+
+        // Pulsing ring
+        const ring =
+          document.createElement("div");
+
+        ring.className =
+          "swarmai-user-dot-ring";
+
+        ring.style.cssText = `
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          background: rgba(59, 130, 246, 0.35);
+          border: 2px solid rgba(59, 130, 246, 0.7);
+        `;
+
+        // Inner solid dot
+        const dot =
+          document.createElement("div");
+
+        dot.style.cssText = `
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: #3b82f6;
+          border: 3px solid #ffffff;
+          box-shadow: 0 0 14px rgba(59, 130, 246, 0.9);
+          position: relative;
+          z-index: 1;
+        `;
+
+        el.appendChild(ring);
+        el.appendChild(dot);
+
+        const popup =
+          new maplibregl.Popup({ offset: 20 })
+            .setHTML(`
+              <div style="font-family:Arial;padding:4px 6px;color:#111;">
+                <strong>📍 Your Current Location</strong>
+              </div>
+            `);
+
+        userLocationMarkerRef.current =
+          new maplibregl.Marker({
+            element: el,
+            anchor: "center",
+          })
+            .setLngLat([lng, lat])
+            .setPopup(popup)
+            .addTo(map);
+
+        console.log(
+          "📍 User location marker placed:",
+          lat,
+          lng
+        );
+      },
+      [injectUserLocationStyles]
+    );
+
+  // =========================================================
+  // REACT TO userLocation PROP CHANGES
+  // =========================================================
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (
+      !map ||
+      !mapLoadedRef.current ||
+      !userLocation?.lat ||
+      !userLocation?.lng
+    ) {
+      return;
+    }
+
+    const { lat, lng } = userLocation;
+
+    createUserLocationMarker(map, lat, lng);
+
+    // Auto-center to user location only on first detection
+    // and only if no disaster data is present yet
+    if (
+      !userLocationCenteredRef.current &&
+      !data
+    ) {
+      map.flyTo({
+        center: [lng, lat],
+        zoom: 13,
+        duration: 1800,
+        essential: true,
+      });
+
+      userLocationCenteredRef.current = true;
+    }
+  }, [
+    userLocation,
+    data,
+    createUserLocationMarker,
+  ]);
 
   // =========================================================
   // UPDATE MAP
