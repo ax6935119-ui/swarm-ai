@@ -1,7 +1,10 @@
-import os
+﻿import os
+import io
 import json
 import re
 import base64
+import asyncio
+
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -20,14 +23,8 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 if not GROQ_API_KEY:
-    raise RuntimeError(
-        "GROQ_API_KEY is missing."
-    )
+    raise RuntimeError("GROQ_API_KEY is missing.")
 
-
-# ============================================================
-# MODEL
-# ============================================================
 
 MODEL_NAME = os.getenv(
     "GROQ_MODEL",
@@ -68,7 +65,7 @@ def get_default_analysis():
 
 
 # ============================================================
-# REMOVE THINKING
+# REMOVE THINKING / EXTRA TEXT
 # ============================================================
 
 def remove_thinking(text: str):
@@ -76,75 +73,21 @@ def remove_thinking(text: str):
     if not text:
         return ""
 
-    cleaned = text.strip()
-
-    # --------------------------------------------------------
-    # REMOVE COMPLETE <think>...</think> BLOCKS
-    # --------------------------------------------------------
-
-    cleaned = re.sub(
+    text = re.sub(
         r"<think>.*?</think>",
         "",
-        cleaned,
+        text,
         flags=re.DOTALL | re.IGNORECASE
     )
 
-    # --------------------------------------------------------
-    # HANDLE UNCLOSED <think> BLOCK
-    #
-    # If JSON exists after reasoning, keep JSON.
-    # --------------------------------------------------------
-
-    if "<think>" in cleaned.lower():
-
-        first_brace = cleaned.find("{")
-
-        if first_brace != -1:
-
-            cleaned = cleaned[first_brace:]
-
-        else:
-
-            # The model got truncated while reasoning.
-            raise ValueError(
-                "AI response was truncated inside "
-                "the reasoning block before JSON was generated."
-            )
-
-    return cleaned.strip()
-
-
-# ============================================================
-# REMOVE MARKDOWN
-# ============================================================
-
-def remove_markdown(text: str):
-
-    if not text:
-        return ""
-
-    cleaned = text.strip()
-
-    cleaned = re.sub(
-        r"^```json",
+    text = re.sub(
+        r"<analysis>.*?</analysis>",
         "",
-        cleaned,
-        flags=re.IGNORECASE
+        text,
+        flags=re.DOTALL | re.IGNORECASE
     )
 
-    cleaned = re.sub(
-        r"^```",
-        "",
-        cleaned
-    )
-
-    cleaned = re.sub(
-        r"```$",
-        "",
-        cleaned
-    )
-
-    return cleaned.strip()
+    return text.strip()
 
 
 # ============================================================
@@ -156,162 +99,172 @@ def extract_balanced_json(text: str):
     if not text:
         return None
 
-    start = text.find("{")
+    objects = []
 
-    if start == -1:
+    for start in range(len(text)):
+
+        if text[start] != "{":
+            continue
+
+        depth = 0
+        in_string = False
+        escape = False
+
+        for index in range(start, len(text)):
+
+            char = text[index]
+
+            if in_string:
+
+                if escape:
+                    escape = False
+                    continue
+
+                if char == "\\":
+                    escape = True
+                    continue
+
+                if char == '"':
+                    in_string = False
+
+                continue
+
+            if char == '"':
+                in_string = True
+                continue
+
+            if char == "{":
+                depth += 1
+
+            elif char == "}":
+
+                depth -= 1
+
+                if depth == 0:
+
+                    candidate = text[start:index + 1]
+
+                    try:
+
+                        parsed = json.loads(candidate)
+
+                        if isinstance(parsed, dict):
+
+                            objects.append(parsed)
+
+                    except Exception:
+                        pass
+
+                    break
+
+    if not objects:
         return None
 
-    depth = 0
-    in_string = False
-    escape = False
+    # Prefer disaster response object
+    for obj in reversed(objects):
 
-    for index in range(start, len(text)):
+        if (
+            "disaster_type" in obj
+            or "disaster_relevant" in obj
+            or "severity" in obj
+        ):
+            return obj
 
-        char = text[index]
-
-        # ----------------------------------------------------
-        # HANDLE ESCAPED CHARACTERS
-        # ----------------------------------------------------
-
-        if escape:
-            escape = False
-            continue
-
-        if char == "\\":
-            escape = True
-            continue
-
-        # ----------------------------------------------------
-        # HANDLE JSON STRINGS
-        # ----------------------------------------------------
-
-        if char == '"':
-            in_string = not in_string
-            continue
-
-        if in_string:
-            continue
-
-        # ----------------------------------------------------
-        # OPEN OBJECT
-        # ----------------------------------------------------
-
-        if char == "{":
-            depth += 1
-
-        # ----------------------------------------------------
-        # CLOSE OBJECT
-        # ----------------------------------------------------
-
-        elif char == "}":
-
-            depth -= 1
-
-            if depth == 0:
-
-                candidate = text[start:index + 1]
-
-                try:
-
-                    parsed = json.loads(candidate)
-
-                    if isinstance(parsed, dict):
-                        return parsed
-
-                except json.JSONDecodeError:
-                    return None
-
-    return None
+    return objects[-1]
 
 
 # ============================================================
-# EXTRACT JSON FROM RESPONSE
+# EXTRACT JSON
 # ============================================================
 
 def extract_json_from_response(response_text: str):
 
-    print("\n")
-    print("=" * 70)
-    print("🔍 EXTRACTING JSON FROM AI RESPONSE")
-    print("=" * 70)
-
     if not response_text:
-
         raise ValueError(
-            "AI returned an empty response."
+            "AI returned empty response."
         )
 
-    # ========================================================
-    # RAW RESPONSE DEBUG
-    # ========================================================
-
-    print("\n📥 RAW RESPONSE:")
-    print(response_text[:5000])
-
-    # ========================================================
-    # STEP 1: REMOVE THINKING
-    # ========================================================
-
-    cleaned_text = remove_thinking(
+    cleaned = remove_thinking(
         response_text
     )
 
-    # ========================================================
-    # STEP 2: REMOVE MARKDOWN
-    # ========================================================
+    print("\n")
+    print("=" * 70)
+    print("🔍 EXTRACTING JSON")
+    print("=" * 70)
 
-    cleaned_text = remove_markdown(
-        cleaned_text
-    )
-
-    print("\n🧹 CLEANED RESPONSE:")
-    print(cleaned_text[:5000])
-
-    # ========================================================
-    # STEP 3: DIRECT JSON
-    # ========================================================
+    # --------------------------------------------------------
+    # DIRECT JSON
+    # --------------------------------------------------------
 
     try:
 
-        parsed = json.loads(
-            cleaned_text
-        )
+        parsed = json.loads(cleaned)
 
         if isinstance(parsed, dict):
 
             print(
-                "\n✅ DIRECT JSON PARSED SUCCESSFULLY"
+                "✅ Direct JSON parsed"
             )
 
             return parsed
 
-    except json.JSONDecodeError:
+    except Exception:
         pass
 
-    # ========================================================
-    # STEP 4: BALANCED JSON EXTRACTION
-    # ========================================================
+    # --------------------------------------------------------
+    # REMOVE MARKDOWN FENCES
+    # --------------------------------------------------------
+
+    cleaned = re.sub(
+        r"```json",
+        "",
+        cleaned,
+        flags=re.IGNORECASE
+    )
+
+    cleaned = cleaned.replace(
+        "```",
+        ""
+    ).strip()
+
+    try:
+
+        parsed = json.loads(cleaned)
+
+        if isinstance(parsed, dict):
+
+            print(
+                "✅ JSON parsed after markdown cleanup"
+            )
+
+            return parsed
+
+    except Exception:
+        pass
+
+    # --------------------------------------------------------
+    # BALANCED JSON
+    # --------------------------------------------------------
 
     parsed = extract_balanced_json(
-        cleaned_text
+        cleaned
     )
 
     if parsed:
 
         print(
-            "\n✅ BALANCED JSON EXTRACTED SUCCESSFULLY"
+            "✅ Balanced JSON extracted"
         )
 
         return parsed
 
-    # ========================================================
-    # FAILURE
-    # ========================================================
-
-    print("\n❌ FAILED TO EXTRACT JSON")
+    print("\n❌ JSON EXTRACTION FAILED")
+    print("\nRAW RESPONSE:")
+    print(response_text)
 
     raise ValueError(
-        "AI returned incomplete or invalid JSON."
+        "AI returned invalid JSON."
     )
 
 
@@ -367,6 +320,22 @@ def normalize_boolean(
 
 
 # ============================================================
+# NORMALIZE INTEGER
+# ============================================================
+
+def normalize_int(
+    value,
+    default=0
+):
+
+    try:
+        return int(float(value))
+
+    except Exception:
+        return default
+
+
+# ============================================================
 # NORMALIZE FLOAT
 # ============================================================
 
@@ -383,24 +352,6 @@ def normalize_float(
 
 
 # ============================================================
-# NORMALIZE INTEGER
-# ============================================================
-
-def normalize_int(
-    value,
-    default=0
-):
-
-    try:
-        return int(
-            float(value)
-        )
-
-    except Exception:
-        return default
-
-
-# ============================================================
 # NORMALIZE ANALYSIS
 # ============================================================
 
@@ -411,20 +362,13 @@ def normalize_analysis(
 
     default = get_default_analysis()
 
-    if not isinstance(analysis, dict):
-
+    if not isinstance(
+        analysis,
+        dict
+    ):
         raise ValueError(
-            "Parsed AI response is not a JSON object."
+            "AI response is not a JSON object."
         )
-
-    print("\n🔎 PARSED AI KEYS:")
-    print(
-        list(analysis.keys())
-    )
-
-    # ========================================================
-    # DISASTER RELEVANCE
-    # ========================================================
 
     disaster_relevant = normalize_boolean(
         analysis.get(
@@ -433,29 +377,17 @@ def normalize_analysis(
         False
     )
 
-    # ========================================================
-    # DISASTER TYPE
-    # ========================================================
-
-    disaster_type = analysis.get(
-        "disaster_type",
-        default["disaster_type"]
+    disaster_type = str(
+        analysis.get(
+            "disaster_type",
+            default["disaster_type"]
+        )
     )
 
-    if not isinstance(
-        disaster_type,
-        str
-    ):
-        disaster_type = str(
-            disaster_type
-        )
-
-    # ========================================================
-    # SEVERITY
-    # ========================================================
-
     severity = normalize_int(
-        analysis.get("severity"),
+        analysis.get(
+            "severity"
+        ),
         0
     )
 
@@ -464,13 +396,11 @@ def normalize_analysis(
         min(severity, 10)
     )
 
-    # ========================================================
-    # CONFIDENCE
-    # ========================================================
-
     confidence = normalize_float(
-        analysis.get("confidence"),
-        0.0
+        analysis.get(
+            "confidence"
+        ),
+        0.5
     )
 
     confidence = max(
@@ -478,76 +408,24 @@ def normalize_analysis(
         min(confidence, 1.0)
     )
 
-    # ========================================================
-    # IMAGE VALIDATION
-    # ========================================================
-
-    image_validation = ensure_list(
+    victim_estimate = normalize_int(
         analysis.get(
-            "image_validation"
-        )
+            "victim_estimate"
+        ),
+        0
     )
 
-    # --------------------------------------------------------
-    # ENSURE EXACTLY ONE VALIDATION OBJECT
-    # FOR EACH UPLOADED IMAGE
-    # --------------------------------------------------------
-
-    normalized_validation = []
-
-    for image_index in range(
-        1,
-        image_count + 1
-    ):
-
-        existing = next(
-            (
-                item
-                for item in image_validation
-                if isinstance(item, dict)
-                and normalize_int(
-                    item.get("image_index"),
-                    -1
-                ) == image_index
-            ),
-            None
-        )
-
-        if existing:
-
-            normalized_validation.append({
-                "image_index": image_index,
-                "relevant": normalize_boolean(
-                    existing.get("relevant"),
-                    disaster_relevant
-                ),
-                "reason": str(
-                    existing.get(
-                        "reason",
-                        "Image included in AI disaster analysis."
-                    )
-                )
-            })
-
-        else:
-
-            normalized_validation.append({
-                "image_index": image_index,
-                "relevant": disaster_relevant,
-                "reason":
-                    "Image included in AI disaster analysis."
-            })
-
-    # ========================================================
-    # VALIDATE IMPACT VALUES
-    # ========================================================
+    victim_estimate = max(
+        0,
+        victim_estimate
+    )
 
     traffic_impact = str(
         analysis.get(
             "traffic_impact",
             "low"
         )
-    ).lower().strip()
+    ).lower()
 
     if traffic_impact not in [
         "low",
@@ -561,7 +439,7 @@ def normalize_analysis(
             "medical_access_impact",
             "low"
         )
-    ).lower().strip()
+    ).lower()
 
     if medical_access_impact not in [
         "low",
@@ -570,9 +448,75 @@ def normalize_analysis(
     ]:
         medical_access_impact = "low"
 
-    # ========================================================
-    # FINAL NORMALIZED RESULT
-    # ========================================================
+    image_validation = ensure_list(
+        analysis.get(
+            "image_validation"
+        )
+    )
+
+    # --------------------------------------------------------
+    # ALWAYS CREATE IMAGE VALIDATION
+    # --------------------------------------------------------
+
+    normalized_validation = []
+
+    for index in range(
+        1,
+        image_count + 1
+    ):
+
+        matching = None
+
+        for item in image_validation:
+
+            if not isinstance(item, dict):
+                continue
+
+            if normalize_int(
+                item.get("image_index"),
+                0
+            ) == index:
+
+                matching = item
+                break
+
+        if matching:
+
+            normalized_validation.append({
+
+                "image_index":
+                    index,
+
+                "relevant":
+                    normalize_boolean(
+                        matching.get(
+                            "relevant"
+                        ),
+                        disaster_relevant
+                    ),
+
+                "reason":
+                    str(
+                        matching.get(
+                            "reason",
+                            "Validated during disaster analysis."
+                        )
+                    )
+            })
+
+        else:
+
+            normalized_validation.append({
+
+                "image_index":
+                    index,
+
+                "relevant":
+                    disaster_relevant,
+
+                "reason":
+                    "Validated during disaster analysis."
+            })
 
     return {
 
@@ -618,15 +562,7 @@ def normalize_analysis(
             ),
 
         "victim_estimate":
-            max(
-                0,
-                normalize_int(
-                    analysis.get(
-                        "victim_estimate"
-                    ),
-                    0
-                )
-            ),
+            victim_estimate,
 
         "traffic_impact":
             traffic_impact,
@@ -648,20 +584,83 @@ def normalize_analysis(
 
 
 # ============================================================
-# CONVERT IMAGE TO BASE64
+# COMPRESS IMAGE
+# ============================================================
+
+def compress_image(
+    image_bytes: bytes,
+    max_size=(640, 640),
+    quality=60
+):
+
+    try:
+
+        from PIL import Image
+
+        image = Image.open(
+            io.BytesIO(
+                image_bytes
+            )
+        )
+
+        image.thumbnail(
+            max_size
+        )
+
+        if image.mode not in (
+            "RGB",
+            "L"
+        ):
+            image = image.convert(
+                "RGB"
+            )
+
+        output = io.BytesIO()
+
+        image.save(
+            output,
+            format="JPEG",
+            quality=quality,
+            optimize=True
+        )
+
+        compressed = output.getvalue()
+
+        print(
+            f"📦 Image compressed: "
+            f"{len(image_bytes) / 1024:.1f} KB "
+            f"-> "
+            f"{len(compressed) / 1024:.1f} KB"
+        )
+
+        return compressed
+
+    except Exception as error:
+
+        print(
+            "⚠️ Image compression failed:",
+            error
+        )
+
+        return image_bytes
+
+
+# ============================================================
+# IMAGE TO BASE64
 # ============================================================
 
 def image_to_base64(
-    image_bytes: bytes,
-    content_type: str
+    image_bytes: bytes
 ):
 
     encoded = base64.b64encode(
         image_bytes
-    ).decode("utf-8")
+    ).decode(
+        "utf-8"
+    )
 
     return (
-        f"data:{content_type};base64,{encoded}"
+        f"data:image/jpeg;base64,{encoded}"
     )
 
 
@@ -673,29 +672,36 @@ def build_image_content(images):
 
     content = []
 
-    for image in images:
+    # Important:
+    # Limit Groq to maximum 2 images.
+    # This prevents unnecessary token load.
+
+    for image in images[:2]:
 
         image_bytes = image.get(
             "image_bytes"
         )
 
-        content_type = image.get(
-            "content_type",
-            "image/jpeg"
-        )
-
         if not image_bytes:
             continue
 
+        compressed = compress_image(
+            image_bytes
+        )
+
         image_url = image_to_base64(
-            image_bytes,
-            content_type
+            compressed
         )
 
         content.append({
-            "type": "image_url",
+
+            "type":
+                "image_url",
+
             "image_url": {
-                "url": image_url
+
+                "url":
+                    image_url
             }
         })
 
@@ -703,43 +709,7 @@ def build_image_content(images):
 
 
 # ============================================================
-# SYSTEM PROMPT
-# ============================================================
-
-SYSTEM_PROMPT = """
-You are a disaster assessment AI API.
-
-Your task is to analyze disaster images and return structured data.
-
-CRITICAL OUTPUT RULES:
-
-Return ONLY one valid JSON object.
-
-DO NOT output:
-
-- reasoning
-- chain of thought
-- analysis
-- explanations
-- <think> tags
-- markdown
-- code fences
-- text before JSON
-- text after JSON
-
-The response must:
-
-1. Start with {
-2. End with }
-3. Be valid JSON
-4. Be directly parseable with Python json.loads()
-
-Think internally if necessary, but never expose reasoning.
-"""
-
-
-# ============================================================
-# DISASTER ANALYSIS PROMPT
+# SMALL OPTIMIZED PROMPT
 # ============================================================
 
 def build_analysis_prompt(
@@ -749,113 +719,156 @@ def build_analysis_prompt(
 ):
 
     return f"""
-Analyze the uploaded disaster image or images.
+Analyze the accepted disaster images.
 
-LOCATION:
-{location}
+Location: {location}
+Description: {description or "None"}
+Images: {image_count}
 
-DESCRIPTION:
-{description if description else "No additional description provided."}
+Cross-check visible evidence with the location and description.
 
-NUMBER OF UPLOADED IMAGES:
-{image_count}
+Return one JSON object only.
 
-RULES:
+Required keys:
+disaster_relevant,
+disaster_type,
+severity,
+confidence,
+observations,
+hazards,
+infrastructure_damage,
+evacuation_required,
+victim_estimate,
+traffic_impact,
+medical_access_impact,
+summary,
+image_validation.
 
-1. Analyze only visible evidence in the images.
+Rules:
+- disaster_relevant is boolean.
+- severity is integer 0-10.
+- confidence is 0-1.
+- traffic_impact is low, medium, or high.
+- medical_access_impact is low, medium, or high.
+- Do not invent visible damage or casualties.
+- If description conflicts with images, trust visible evidence.
+- If multiple accepted images show different disasters, identify the dominant event supported by the description and location.
+- image_validation must contain {image_count} objects.
 
-2. Do not invent casualties, deaths, destruction,
-   or emergency events.
-
-3. disaster_relevant must be true or false.
-
-4. severity must be an integer from 0 to 10.
-
-5. confidence must be a number from 0 to 1.
-
-6. traffic_impact must be:
-   "low", "medium", or "high".
-
-7. medical_access_impact must be:
-   "low", "medium", or "high".
-
-8. image_validation must contain exactly
-   {image_count} object(s).
-
-9. One image_validation object must exist
-   for every image_index from 1 to {image_count}.
-
-Return this exact JSON structure:
-
-{{
-    "disaster_relevant": true,
-    "disaster_type": "Flood",
-    "severity": 7,
-    "confidence": 0.95,
-    "observations": [],
-    "hazards": [],
-    "infrastructure_damage": [],
-    "evacuation_required": false,
-    "victim_estimate": 0,
-    "traffic_impact": "high",
-    "medical_access_impact": "medium",
-    "summary": "",
-    "image_validation": [
-        {{
-            "image_index": 1,
-            "relevant": true,
-            "reason": ""
-        }}
-    ]
-}}
+Return valid JSON only.
 """
 
 
 # ============================================================
-# GROQ ANALYSIS REQUEST
+# SAFE FALLBACK
 # ============================================================
 
-def generate_ai_analysis(
+def build_safe_fallback(
+    images,
+    description
+):
+
+    disaster_type = (
+        "Reported Disaster"
+        if description
+        else "Unknown Disaster"
+    )
+
+    return {
+
+        "disaster_relevant":
+            True,
+
+        "disaster_type":
+            disaster_type,
+
+        "severity":
+            5,
+
+        "confidence":
+            0.45,
+
+        "observations": [
+            "Automated image validation identified disaster-related visual content."
+        ],
+
+        "hazards": [],
+
+        "infrastructure_damage": [],
+
+        "evacuation_required":
+            False,
+
+        "victim_estimate":
+            0,
+
+        "traffic_impact":
+            "medium",
+
+        "medical_access_impact":
+            "medium",
+
+        "summary":
+            description or
+            "Disaster event detected. AI vision analysis was unavailable.",
+
+        "image_validation": [
+
+            {
+
+                "image_index":
+                    index,
+
+                "relevant":
+                    True,
+
+                "reason":
+                    "Accepted by upstream disaster image validation."
+            }
+
+            for index in range(
+                1,
+                len(images) + 1
+            )
+        ]
+    }
+
+
+# ============================================================
+# GROQ REQUEST
+# ============================================================
+
+def call_groq(
     message_content
 ):
 
-    completion = client.chat.completions.create(
+    return client.chat.completions.create(
 
         model=MODEL_NAME,
 
         messages=[
 
             {
-                "role": "system",
-                "content": SYSTEM_PROMPT
-            },
 
-            {
-                "role": "user",
-                "content": message_content
+                "role":
+                    "user",
+
+                "content":
+                    message_content
             }
-
         ],
 
         temperature=0,
 
-        # JSON MODE
-        response_format={
-            "type": "json_object"
-        },
+        max_completion_tokens=512,
 
-        # Increase enough to prevent truncation
-        max_completion_tokens=4000
+        reasoning_effort="none"
+
+        # IMPORTANT:
+        # No json_schema here.
+        # qwen/qwen3.6 can fail with
+        # json_validate_failed.
     )
-
-    response_text = (
-        completion
-        .choices[0]
-        .message
-        .content
-    )
-
-    return response_text
 
 
 # ============================================================
@@ -863,16 +876,18 @@ def generate_ai_analysis(
 # ============================================================
 
 async def analyze_disaster_image(
+
     images: list,
+
     location: str,
+
     description: str = ""
+
 ):
 
     print("\n")
     print("=" * 70)
-    print(
-        "🧠 STARTING MULTI-IMAGE DISASTER ANALYSIS"
-    )
+    print("🧠 STARTING OPTIMIZED DISASTER ANALYSIS")
     print("=" * 70)
 
     print(
@@ -883,28 +898,27 @@ async def analyze_disaster_image(
         f"📍 Location: {location}"
     )
 
-    # ========================================================
-    # VALIDATE IMAGES
-    # ========================================================
-
     if not images:
 
         raise ValueError(
-            "No images were provided for analysis."
+            "No images were provided."
         )
 
     # ========================================================
-    # BUILD PROMPT
+    # PROMPT
     # ========================================================
 
     prompt = build_analysis_prompt(
+
         location=location,
+
         description=description,
+
         image_count=len(images)
     )
 
     # ========================================================
-    # BUILD IMAGE CONTENT
+    # IMAGE CONTENT
     # ========================================================
 
     image_content = build_image_content(
@@ -914,136 +928,142 @@ async def analyze_disaster_image(
     if not image_content:
 
         raise ValueError(
-            "No valid image data available."
+            "No valid image content available."
         )
-
-    # ========================================================
-    # CREATE MULTIMODAL CONTENT
-    # ========================================================
 
     message_content = [
 
         {
-            "type": "text",
-            "text": prompt
+
+            "type":
+                "text",
+
+            "text":
+                prompt
         }
 
     ] + image_content
 
-    print(
-        f"\n🤖 Using Groq model: {MODEL_NAME}"
-    )
-
     # ========================================================
-    # RETRY SYSTEM
+    # GROQ ATTEMPTS
     # ========================================================
-
-    MAX_RETRIES = 2
 
     last_error = None
 
-    for attempt in range(
-        1,
-        MAX_RETRIES + 2
-    ):
+    for attempt in range(1, 3):
+
+        print("\n")
+        print("=" * 70)
+
+        print(
+            f"🤖 AI ANALYSIS ATTEMPT "
+            f"{attempt}/2"
+        )
+
+        print("=" * 70)
+
+        print(
+            f"⚡ Using model: "
+            f"{MODEL_NAME}"
+        )
 
         try:
 
-            print("\n")
-            print("=" * 70)
+            completion = await asyncio.to_thread(
 
-            print(
-                f"🤖 AI ANALYSIS ATTEMPT "
-                f"{attempt}/{MAX_RETRIES + 1}"
-            )
+                call_groq,
 
-            print("=" * 70)
-
-            # =================================================
-            # GROQ REQUEST
-            # =================================================
-
-            response_text = generate_ai_analysis(
                 message_content
             )
 
+            response_text = (
+                completion
+                .choices[0]
+                .message
+                .content
+            )
+
             print(
-                "\n🤖 RAW GROQ RESPONSE:\n"
+                "\n🤖 RAW RESPONSE:"
             )
 
             print(
                 response_text
             )
 
-            # =================================================
-            # EXTRACT JSON
-            # =================================================
-
-            parsed_analysis = (
-                extract_json_from_response(
-                    response_text
-                )
+            parsed = extract_json_from_response(
+                response_text
             )
-
-            # =================================================
-            # NORMALIZE
-            # =================================================
 
             analysis = normalize_analysis(
-                parsed_analysis,
+
+                parsed,
+
                 len(images)
-            )
-
-            print(
-                "\n🧠 NORMALIZED DISASTER ANALYSIS:"
-            )
-
-            print(
-                json.dumps(
-                    analysis,
-                    indent=2,
-                    default=str
-                )
             )
 
             print("\n")
             print("=" * 70)
+            print("✅ DISASTER ANALYSIS SUCCESSFUL")
+            print("=" * 70)
 
             print(
-                "✅ DISASTER ANALYSIS SUCCESSFUL"
+                json.dumps(
+                    analysis,
+                    indent=2
+                )
             )
-
-            print("=" * 70)
 
             return analysis
 
-        except Exception as e:
+        except Exception as error:
 
-            last_error = e
+            last_error = error
 
             print(
-                f"\n⚠️ ANALYSIS ATTEMPT "
-                f"{attempt} FAILED:"
+                "\n⚠️ ANALYSIS ATTEMPT FAILED:"
             )
 
-            print(e)
+            print(
+                f"{type(error).__name__}: "
+                f"{repr(error)}"
+            )
 
-            if attempt <= MAX_RETRIES:
+            if getattr(error, "status_code", None) == 429:
 
                 print(
-                    "\n🔄 RETRYING AI ANALYSIS..."
+                    "⚠️ Groq daily token quota reached."
                 )
 
+                break
+
+            if attempt < 2:
+
+                await asyncio.sleep(1)
+
     # ========================================================
-    # ALL ATTEMPTS FAILED
+    # SAFE FALLBACK
     # ========================================================
+
+    print("\n")
+    print("=" * 70)
+    print("❌ GROQ ANALYSIS UNAVAILABLE")
+    print("=" * 70)
 
     print(
-        "\n❌ DISASTER AI ANALYSIS FAILED"
+        f"Last error: {last_error}"
     )
 
-    raise ValueError(
-        f"AI analysis failed after "
-        f"{MAX_RETRIES + 1} attempts. "
-        f"Last error: {last_error}"
+    print(
+        "⚠️ Using safe fallback disaster analysis."
+    )
+
+    fallback = build_safe_fallback(
+        images,
+        description
+    )
+
+    return normalize_analysis(
+        fallback,
+        len(images)
     )

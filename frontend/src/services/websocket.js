@@ -10,101 +10,389 @@ const WS_URL =
 let socket = null;
 let reconnectTimer = null;
 
-export function connectWebSocket({
-  onMessage,
-  onOpen,
-  onClose,
-  onError,
-} = {}) {
+let manuallyClosed = false;
+let connecting = false;
+let connectionOptions = {};
+
+const listeners = new Set();
+
+
+// =========================================================
+// CONNECT
+// =========================================================
+
+export function connectWebSocket(options = {}) {
+
+  connectionOptions = {
+    ...connectionOptions,
+    ...options,
+  };
+
+  // Already connected
+
   if (
     socket &&
-    (
-      socket.readyState === WebSocket.OPEN ||
-      socket.readyState === WebSocket.CONNECTING
-    )
+    socket.readyState === WebSocket.OPEN
   ) {
+
+    console.log(
+      "🟢 WebSocket already OPEN"
+    );
+
     return socket;
   }
 
-  const url = `${WS_URL}/ws/disaster`;
 
-  console.log("🔌 Connecting WebSocket:", url);
+  // Already connecting
 
-  socket = new WebSocket(url);
+  if (
+    socket &&
+    socket.readyState === WebSocket.CONNECTING
+  ) {
 
-  socket.onopen = () => {
-    console.log("🟢 WebSocket connected");
+    console.log(
+      "🟡 WebSocket already CONNECTING"
+    );
 
-    if (onOpen) {
-      onOpen();
-    }
-  };
+    return socket;
+  }
 
-  socket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
 
-      console.log("📡 WebSocket message:", data);
+  if (connecting) {
 
-      if (onMessage) {
-        onMessage(data);
+    return socket;
+
+  }
+
+
+  manuallyClosed = false;
+
+  connecting = true;
+
+
+  // Clear old reconnect timer
+
+  if (reconnectTimer) {
+
+    clearTimeout(
+      reconnectTimer
+    );
+
+    reconnectTimer = null;
+
+  }
+
+
+  const url =
+    `${WS_URL}/ws/disaster`;
+
+  console.log(
+    "🔌 Connecting WebSocket:",
+    url
+  );
+
+
+  const connection =
+    new WebSocket(
+      url
+    );
+
+  socket = connection;
+
+
+  // =======================================================
+  // OPEN
+  // =======================================================
+
+  connection.onopen =
+    () => {
+
+      connecting = false;
+
+      connectionOptions.onOpen?.();
+
+      console.log(
+        "🟢 WebSocket CONNECTED"
+      );
+
+    };
+
+
+  // =======================================================
+  // MESSAGE
+  // =======================================================
+
+  connection.onmessage =
+    (event) => {
+
+      try {
+
+        const message =
+          JSON.parse(
+            event.data
+          );
+
+        console.log(
+          "📡 WebSocket DATA RECEIVED:",
+          message
+        );
+
+
+        listeners.forEach(
+          (listener) => {
+
+            try {
+
+              listener(
+                message
+              );
+
+            } catch (
+              error
+            ) {
+
+              console.error(
+                "❌ WebSocket listener error:",
+                error
+              );
+
+            }
+
+          }
+        );
+
+        connectionOptions.onMessage?.(message);
+
+      } catch (
+        error
+      ) {
+
+        console.error(
+          "❌ Invalid WebSocket JSON:",
+          error
+        );
+
       }
-    } catch (error) {
+
+    };
+
+
+  // =======================================================
+  // ERROR
+  // =======================================================
+
+  connection.onerror =
+    (error) => {
+
+      connecting = false;
+
+      connectionOptions.onError?.(error);
+
       console.error(
-        "❌ WebSocket JSON parse error:",
+        "❌ WebSocket error:",
         error
       );
-    }
-  };
 
-  socket.onerror = (error) => {
-    console.error(
-      "❌ WebSocket error:",
-      error
-    );
+    };
 
-    if (onError) {
-      onError(error);
-    }
-  };
 
-  socket.onclose = () => {
-    console.log(
-      "🔴 WebSocket disconnected"
-    );
+  // =======================================================
+  // CLOSE
+  // =======================================================
 
-    socket = null;
+  connection.onclose =
+    (event) => {
 
-    if (onClose) {
-      onClose();
-    }
+      connecting = false;
 
-    // reconnect after 3 seconds
-    reconnectTimer = setTimeout(() => {
-      connectWebSocket({
-        onMessage,
-        onOpen,
-        onClose,
-        onError,
-      });
-    }, 3000);
-  };
+      console.log(
+        "🔴 WebSocket CLOSED"
+      );
+
+      console.log(
+        "Code:",
+        event.code
+      );
+
+      console.log(
+        "Reason:",
+        event.reason ||
+        "No reason"
+      );
+
+      connectionOptions.onClose?.(event);
+
+
+      if (socket === connection) {
+        socket = null;
+      }
+
+
+      // Do not reconnect if explicitly closed
+
+      if (
+        manuallyClosed
+      ) {
+
+        console.log(
+          "🛑 Manual WebSocket close"
+        );
+
+        return;
+
+      }
+
+
+      console.log(
+        "🔄 Reconnecting WebSocket in 2 seconds..."
+      );
+
+
+      reconnectTimer =
+        setTimeout(
+          () => {
+
+            connectWebSocket(connectionOptions);
+
+          },
+          2000
+        );
+
+    };
+
 
   return socket;
+
 }
 
-export function disconnectWebSocket() {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
+
+// =========================================================
+// SUBSCRIBE
+// =========================================================
+
+export function subscribeWebSocket(
+  callback
+) {
+
+  listeners.add(
+    callback
+  );
+
+
+  // Ensure socket is connected
+
+  connectWebSocket();
+
+
+  // Return unsubscribe function
+
+  return () => {
+
+    listeners.delete(
+      callback
+    );
+
+  };
+
+}
+
+
+// =========================================================
+// SEND MESSAGE
+// =========================================================
+
+export function sendWebSocketMessage(
+  message
+) {
+
+  if (
+    !socket ||
+    socket.readyState !== WebSocket.OPEN
+  ) {
+
+    console.warn(
+      "⚠️ WebSocket not connected"
+    );
+
+    return false;
+
   }
 
-  if (socket) {
-    socket.close();
-    socket = null;
-  }
+
+  socket.send(
+    JSON.stringify(
+      message
+    )
+  );
+
+  return true;
+
 }
+
+
+// =========================================================
+// GET SOCKET
+// =========================================================
 
 export function getWebSocket() {
+
   return socket;
+
+}
+
+
+// =========================================================
+// MANUAL DISCONNECT
+// =========================================================
+
+export function disconnectWebSocket() {
+
+  console.log(
+    "🛑 Manually closing WebSocket"
+  );
+
+
+  manuallyClosed = true;
+
+
+  if (
+    reconnectTimer
+  ) {
+
+    clearTimeout(
+      reconnectTimer
+    );
+
+    reconnectTimer = null;
+
+  }
+
+
+  if (
+    socket
+  ) {
+
+    socket.close(
+      1000,
+      "Application closed"
+    );
+
+    socket = null;
+
+  }
+
+}
+
+
+// =========================================================
+// CONNECTION STATUS
+// =========================================================
+
+export function isWebSocketConnected() {
+
+  return Boolean(
+    socket &&
+    socket.readyState === WebSocket.OPEN
+  );
+
 }

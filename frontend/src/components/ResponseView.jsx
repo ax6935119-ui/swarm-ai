@@ -53,9 +53,20 @@ export default function ResponseView({ data, onReset, userLocation = null }) {
   const medicalData = extractAgentData("MedicalAgent");
   const resourceData = extractAgentData("ResourceAgent");
 
-  const emergencyRecommendation = emergencyData?.decision || null;
-  const medicalRecommendation = medicalData?.decision || null;
-  const resourceRecommendation = resourceData?.decision || null;
+  const formatDecision = (decision) => {
+    if (decision === null || decision === undefined) return "";
+    if (typeof decision === "string" || typeof decision === "number") {
+      return String(decision);
+    }
+    if (typeof decision === "object" && decision.recommendation) {
+      return String(decision.recommendation);
+    }
+    return JSON.stringify(decision);
+  };
+
+  const emergencyRecommendation = formatDecision(emergencyData?.decision);
+  const medicalRecommendation = formatDecision(medicalData?.decision);
+  const resourceRecommendation = formatDecision(resourceData?.decision);
   const routeStatus = trafficData?.traffic_response?.route_status || "Standard Emergency Route";
 
   const disasterType = event.disaster_type || event.disaster || "Disaster Event";
