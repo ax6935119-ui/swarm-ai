@@ -202,11 +202,10 @@ export default function AgentWorkflowPanel({ incident }) {
                 <span className="text-xs font-mono text-gray-400 font-bold uppercase tracking-widest">
                   Incident #{incident?.short_id || (incidentId ? incidentId.slice(0, 8).toUpperCase() : "")}
                 </span>
-                <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${
-                  summary?.workflow_status === "resolved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                  summary?.workflow_status === "failed" ? "bg-red-50 text-red-700 border-red-200" :
-                  "bg-blue-50 text-blue-700 border-blue-200 animate-pulse"
-                }`}>
+                <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${summary?.workflow_status === "resolved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                    summary?.workflow_status === "failed" ? "bg-red-50 text-red-700 border-red-200" :
+                      "bg-blue-50 text-blue-700 border-blue-200 animate-pulse"
+                  }`}>
                   {summary?.workflow_status || "Active Workflow"}
                 </span>
               </div>
@@ -537,11 +536,10 @@ export default function AgentWorkflowPanel({ incident }) {
                         <span className="text-[11px] font-mono text-gray-400">{timeStr}</span>
 
                         {/* Status pill */}
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          evt.status === "success" || evt.status === "active" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                          evt.status === "failed" ? "bg-red-50 text-red-700 border border-red-200" :
-                          "bg-amber-50 text-amber-700 border border-amber-200"
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${evt.status === "success" || evt.status === "active" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                            evt.status === "failed" ? "bg-red-50 text-red-700 border border-red-200" :
+                              "bg-amber-50 text-amber-700 border border-amber-200"
+                          }`}>
                           {evt.status}
                         </span>
                       </div>

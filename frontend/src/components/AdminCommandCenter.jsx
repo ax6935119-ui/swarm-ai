@@ -27,15 +27,15 @@ import DelegationPanel from "./DelegationPanel";
 import AgentWorkflowPanel from "./AgentWorkflowPanel";
 
 const TABS = [
-  { id: "workflow",   label: "Agent Workflow",    icon: FaProjectDiagram },
-  { id: "details",    label: "Incident Details",  icon: FaShieldAlt },
-  { id: "notify",     label: "Notifications",     icon: FaBell },
+  { id: "workflow", label: "Agent Workflow", icon: FaProjectDiagram },
+  { id: "details", label: "Incident Details", icon: FaShieldAlt },
+  { id: "notify", label: "Notifications", icon: FaBell },
   { id: "delegation", label: "Delegation Center", icon: FaTasks },
 ];
 
 function ImpactBadge({ level }) {
   const l = String(level).toLowerCase();
-  if (l === "high")   return <span className="px-2 py-0.5 rounded-lg bg-red-50 text-red-700 border border-red-200 text-xs font-bold">High</span>;
+  if (l === "high") return <span className="px-2 py-0.5 rounded-lg bg-red-50 text-red-700 border border-red-200 text-xs font-bold">High</span>;
   if (l === "medium") return <span className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold">Medium</span>;
   return <span className="px-2 py-0.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-200 text-xs font-semibold capitalize">{level}</span>;
 }
@@ -63,8 +63,8 @@ function SeverityBar({ value }) {
 function IncidentDetailsTab({ incident }) {
   if (!incident) return null;
 
-  const observations   = incident.observations || [];
-  const hazards        = incident.hazards || [];
+  const observations = incident.observations || [];
+  const hazards = incident.hazards || [];
   const infrastructure = incident.infrastructure || [];
 
   const backendBase = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
@@ -114,11 +114,10 @@ function IncidentDetailsTab({ incident }) {
                   return (
                     <div
                       key={idx}
-                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
-                        isValid
+                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${isValid
                           ? "bg-emerald-50/60 border-emerald-200 text-emerald-900"
                           : "bg-red-50/60 border-red-200 text-red-900"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-600">
@@ -136,11 +135,10 @@ function IncidentDetailsTab({ incident }) {
                           {item.reason}
                         </span>
                         <span
-                          className={`px-2.5 py-0.5 rounded-lg border text-[10px] font-bold uppercase tracking-wider ${
-                            isValid
+                          className={`px-2.5 py-0.5 rounded-lg border text-[10px] font-bold uppercase tracking-wider ${isValid
                               ? "bg-emerald-100 text-emerald-800 border-emerald-300"
                               : "bg-red-100 text-red-800 border-red-300"
-                          }`}
+                            }`}
                         >
                           {isValid ? "VALID" : "INVALID"}
                         </span>
@@ -170,13 +168,12 @@ function IncidentDetailsTab({ incident }) {
             <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">{incident.type}</h3>
           </div>
           <span
-            className={`ml-auto px-3 py-1 rounded-xl border text-xs font-bold uppercase tracking-wider ${
-              incident.severityLabel === "critical"
+            className={`ml-auto px-3 py-1 rounded-xl border text-xs font-bold uppercase tracking-wider ${incident.severityLabel === "critical"
                 ? "bg-red-50 text-red-700 border-red-200"
                 : incident.severityLabel === "high"
-                ? "bg-orange-50 text-orange-700 border-orange-200"
-                : "bg-amber-50 text-amber-700 border-amber-200"
-            }`}
+                  ? "bg-orange-50 text-orange-700 border-orange-200"
+                  : "bg-amber-50 text-amber-700 border-amber-200"
+              }`}
           >
             {incident.severityLabel}
           </span>
@@ -341,11 +338,10 @@ export default function AdminCommandCenter({ incident, onBack }) {
             key={id}
             type="button"
             onClick={() => setActiveTab(id)}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-              activeTab === id
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${activeTab === id
                 ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
                 : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
-            }`}
+              }`}
           >
             <Icon className="text-xs" />
             <span className="hidden sm:inline">{label}</span>
@@ -355,9 +351,9 @@ export default function AdminCommandCenter({ incident, onBack }) {
 
       {/* Tab Content */}
       <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs min-h-64">
-        {activeTab === "workflow"   && <AgentWorkflowPanel incident={incident} />}
-        {activeTab === "details"    && <IncidentDetailsTab incident={incident} />}
-        {activeTab === "notify"     && <NotificationPanel incident={incident} />}
+        {activeTab === "workflow" && <AgentWorkflowPanel incident={incident} />}
+        {activeTab === "details" && <IncidentDetailsTab incident={incident} />}
+        {activeTab === "notify" && <NotificationPanel incident={incident} />}
         {activeTab === "delegation" && <DelegationPanel incident={incident} />}
       </div>
     </motion.div>
