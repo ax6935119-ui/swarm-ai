@@ -1,7 +1,33 @@
+
 import os
+
+from dotenv import load_dotenv
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+
+# ============================================================
+# LOAD ENVIRONMENT VARIABLES
+# ============================================================
+
+load_dotenv()
+
+
+# ============================================================
+# DEBUG ENVIRONMENT
+# ============================================================
+
+print("\n" + "=" * 70)
+print("🔐 ENVIRONMENT CONFIGURATION")
+print("=" * 70)
+
+if os.getenv("GROQ_API_KEY"):
+    print("✅ GROQ_API_KEY loaded")
+else:
+    print("❌ GROQ_API_KEY is missing")
+
+print("=" * 70 + "\n")
 
 
 # ============================================================
@@ -35,36 +61,70 @@ from api.scenario_routes import (
 
 app = FastAPI(
     title="SwarmAI Disaster System",
-    version="1.0.0"
+    version="1.0.0",
+    description=(
+        "AI-powered multi-agent disaster detection "
+        "and emergency coordination system."
+    )
 )
 
 
 # ============================================================
-# CORS
+# CORS CONFIGURATION
 # ============================================================
 
 allowed_origins = [
+
     "http://localhost:5173",
-    "http://127.0.0.1:5173"
+
+    "http://127.0.0.1:5173",
+
 ]
 
+
+# ============================================================
+# ENVIRONMENT ORIGINS
+# ============================================================
 
 env_origins = os.getenv(
     "ALLOWED_ORIGINS"
 )
 
+
 if env_origins:
 
+    additional_origins = [
+
+        origin.strip()
+
+        for origin in env_origins.split(",")
+
+        if origin.strip()
+
+    ]
+
     allowed_origins.extend(
-        [
-            origin.strip()
-            for origin in env_origins.split(",")
-            if origin.strip()
-        ]
+        additional_origins
     )
 
 
+print("\n🌐 ALLOWED CORS ORIGINS:")
+
+for origin in allowed_origins:
+
+    print(
+        f"   • {origin}"
+    )
+
+print()
+
+
+# ============================================================
+# ADD CORS MIDDLEWARE
+# ============================================================
+
 app.add_middleware(
+
     CORSMiddleware,
 
     allow_origins=allowed_origins,
@@ -73,7 +133,8 @@ app.add_middleware(
 
     allow_methods=["*"],
 
-    allow_headers=["*"]
+    allow_headers=["*"],
+
 )
 
 
@@ -85,8 +146,38 @@ app.add_middleware(
 async def root():
 
     return {
-        "message": "SwarmAI Disaster Backend Running",
-        "status": "online"
+
+        "message":
+            "SwarmAI Disaster Backend Running",
+
+        "status":
+            "online",
+
+        "version":
+            "1.0.0"
+
+    }
+
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
+
+@app.get("/health")
+async def health_check():
+
+    return {
+
+        "status":
+            "healthy",
+
+        "groq_configured":
+            bool(
+                os.getenv(
+                    "GROQ_API_KEY"
+                )
+            )
+
     }
 
 
@@ -95,21 +186,70 @@ async def root():
 # ============================================================
 
 app.include_router(
+
     dashboard_router
+
 )
 
+
 app.include_router(
+
     status_router
+
 )
 
+
 app.include_router(
+
     disaster_router
+
 )
 
+
 app.include_router(
+
     map_router
+
 )
 
+
 app.include_router(
+
     scenario_router
+
 )
+
+
+# ============================================================
+# STARTUP EVENT
+# ============================================================
+
+@app.on_event("startup")
+async def startup_event():
+
+    print("\n" + "=" * 70)
+
+    print(
+        "🚀 SWARMAI DISASTER SYSTEM STARTED"
+    )
+
+    print("=" * 70)
+
+    print(
+        "📡 API Server: http://127.0.0.1:8000"
+    )
+
+    print(
+        "📚 Swagger Docs: http://127.0.0.1:8000/docs"
+    )
+
+    print(
+        "❤️ Health Check: http://127.0.0.1:8000/health"
+    )
+
+    print(
+        "🔌 WebSocket: ws://127.0.0.1:8000/ws/disaster"
+    )
+
+    print("=" * 70 + "\n")
+

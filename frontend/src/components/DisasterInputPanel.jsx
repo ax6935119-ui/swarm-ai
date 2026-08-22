@@ -1,15 +1,21 @@
-import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  useState,
+  useRef,
+  useEffect,
+} from "react";
+
 import {
   FaMapMarkerAlt,
   FaCamera,
-  FaFileAlt,
   FaTrashAlt,
   FaExclamationCircle,
   FaCloudUploadAlt,
   FaArrowRight,
   FaSpinner,
+  FaImages,
+  FaTimes,
 } from "react-icons/fa";
+
 
 export default function DisasterInputPanel({
   onAnalyze,
@@ -17,392 +23,1824 @@ export default function DisasterInputPanel({
   apiError = null,
   initialValues = null,
 }) {
-  const [location, setLocation] = useState(initialValues?.location || "");
-  const [description, setDescription] = useState(initialValues?.description || "");
-  const [image, setImage] = useState(initialValues?.image || null);
-  const [previewUrl, setPreviewUrl] = useState(null);
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  const [location, setLocation] = useState(
+    initialValues?.location || ""
+  );
+
+  const [description, setDescription] = useState(
+    initialValues?.description || ""
+  );
+
+  const [images, setImages] = useState(
+    initialValues?.images || []
+  );
+
+  const [previewUrls, setPreviewUrls] = useState([]);
+
   const [isDragging, setIsDragging] = useState(false);
+
   const [errors, setErrors] = useState({});
 
-  const fileInputRef = useRef(null);
+  const [cameraOpen, setCameraOpen] =
+    useState(false);
 
-  // Manage preview URL cleanup
+  const [cameraError, setCameraError] =
+    useState(null);
+
+
+  // ============================================================
+  // REFS
+  // ============================================================
+
+  const fileInputRef =
+    useRef(null);
+
+  const videoRef =
+    useRef(null);
+
+  const canvasRef =
+    useRef(null);
+
+  const streamRef =
+    useRef(null);
+
+
+  // ============================================================
+  // INITIAL VALUES UPDATE
+  // ============================================================
+
   useEffect(() => {
-    if (!image) {
-      setPreviewUrl(null);
-      return;
+
+    if (initialValues?.location !== undefined) {
+
+      setLocation(
+        initialValues.location || ""
+      );
+
     }
 
-    const objectUrl = URL.createObjectURL(image);
-    setPreviewUrl(objectUrl);
+    if (
+      initialValues?.description !==
+      undefined
+    ) {
 
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [image]);
+      setDescription(
+        initialValues.description || ""
+      );
+
+    }
+
+    if (initialValues?.images) {
+
+      setImages(
+        initialValues.images
+      );
+
+    }
+
+  }, [initialValues]);
+
+
+  // ============================================================
+  // IMAGE PREVIEWS
+  // ============================================================
+
+  useEffect(() => {
+
+    if (
+      !images ||
+      images.length === 0
+    ) {
+
+      setPreviewUrls([]);
+
+      return;
+
+    }
+
+    const urls = images.map(
+      (image) =>
+        URL.createObjectURL(image)
+    );
+
+    setPreviewUrls(urls);
+
+
+    return () => {
+
+      urls.forEach(
+        (url) =>
+          URL.revokeObjectURL(url)
+      );
+
+    };
+
+  }, [images]);
+
+
+  // ============================================================
+  // CLEAN CAMERA ON COMPONENT UNMOUNT
+  // ============================================================
+
+  useEffect(() => {
+
+    return () => {
+
+      stopCamera();
+
+    };
+
+  }, []);
+
+
+  // ============================================================
+  // VALIDATE IMAGE
+  // ============================================================
 
   const validateFile = (file) => {
-    if (!file) return "Disaster image is required.";
-    if (!file.type || !file.type.startsWith("image/")) {
-      return "Uploaded file must be an image (e.g. JPG, PNG, WEBP, etc.).";
+
+    if (!file) {
+
+      return "Invalid image file.";
+
     }
-    const maxSize = 10 * 1024 * 1024; // 10 MB backend limit
-    if (file.size > maxSize) {
-      return `Image size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 10 MB limit.`;
+
+
+    if (
+      !file.type ||
+      !file.type.startsWith("image/")
+    ) {
+
+      return "Only image files are allowed.";
+
     }
-    if (file.size === 0) {
-      return "Uploaded image file is empty.";
+
+
+    const allowedTypes = [
+
+      "image/jpeg",
+
+      "image/jpg",
+
+      "image/png",
+
+      "image/webp",
+
+    ];
+
+
+    if (
+      !allowedTypes.includes(
+        file.type
+      )
+    ) {
+
+      return (
+        `${file.name} has an unsupported format. ` +
+        "Use JPG, PNG, or WEBP."
+      );
+
     }
+
+
+    const maxSize =
+      10 * 1024 * 1024;
+
+
+    if (
+      file.size > maxSize
+    ) {
+
+      return (
+        `${file.name} exceeds ` +
+        "the 10 MB size limit."
+      );
+
+    }
+
+
+    if (
+      file.size === 0
+    ) {
+
+      return (
+        `${file.name} is empty or corrupted.`
+      );
+
+    }
+
+
     return null;
+
   };
 
-  const handleFileSelect = (file) => {
-    if (!file) return;
-    const fileError = validateFile(file);
-    if (fileError) {
-      setErrors((prev) => ({ ...prev, image: fileError }));
-      setImage(null);
-    } else {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next.image;
-        return next;
-      });
-      setImage(file);
-    }
-  };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
+  // ============================================================
+  // ADD IMAGES
+  // ============================================================
 
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
+  const handleFiles = (
+    fileList
+  ) => {
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
+    if (!fileList) {
 
-    const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
-      handleFileSelect(files[0]);
-    }
-  };
-
-  const handleRemoveImage = () => {
-    setImage(null);
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next.image;
-      return next;
-    });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    const newErrors = {};
-
-    const trimmedLocation = location.trim();
-    if (!trimmedLocation) {
-      newErrors.location = "Please enter the incident location.";
-    }
-
-    const fileError = validateFile(image);
-    if (fileError) {
-      newErrors.image = fileError;
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
       return;
+
     }
 
-    setErrors({});
-    onAnalyze({
-      location: trimmedLocation,
-      description: description.trim(),
-      image,
-    });
+
+    const selectedFiles =
+      Array.from(fileList);
+
+
+    const validFiles = [];
+
+    const fileErrors = [];
+
+
+    selectedFiles.forEach(
+      (file) => {
+
+        const error =
+          validateFile(file);
+
+
+        if (error) {
+
+          fileErrors.push(
+            error
+          );
+
+        }
+
+        else {
+
+          validFiles.push(
+            file
+          );
+
+        }
+
+      }
+    );
+
+
+    // ==========================================================
+    // ERRORS
+    // ==========================================================
+
+    if (
+      fileErrors.length > 0
+    ) {
+
+      setErrors(
+        (prev) => ({
+          ...prev,
+          image:
+            fileErrors.join(" "),
+        })
+      );
+
+    }
+
+    else {
+
+      setErrors(
+        (prev) => {
+
+          const next = {
+            ...prev,
+          };
+
+          delete next.image;
+
+          return next;
+
+        }
+      );
+
+    }
+
+
+    // ==========================================================
+    // ADD UNIQUE FILES
+    // ==========================================================
+
+    if (
+      validFiles.length > 0
+    ) {
+
+      setImages(
+        (previousImages) => {
+
+          const uniqueFiles =
+            validFiles.filter(
+              (newFile) => {
+
+                return !previousImages.some(
+                  (existingFile) =>
+
+                    existingFile.name ===
+                      newFile.name
+
+                    &&
+
+                    existingFile.size ===
+                      newFile.size
+
+                    &&
+
+                    existingFile.lastModified ===
+                      newFile.lastModified
+
+                );
+
+              }
+            );
+
+
+          return [
+
+            ...previousImages,
+
+            ...uniqueFiles,
+
+          ];
+
+        }
+      );
+
+    }
+
   };
 
-  const formatFileSize = (bytes) => {
-    if (!bytes) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+
+  // ============================================================
+  // BROWSE IMAGES
+  // ============================================================
+
+  const handleBrowseImages = () => {
+
+    if (loading) {
+
+      return;
+
+    }
+
+
+    fileInputRef.current?.click();
+
   };
+
+
+  // ============================================================
+  // START CAMERA
+  // ============================================================
+
+  const startCamera =
+    async () => {
+
+      if (loading) {
+
+        return;
+
+      }
+
+
+      setCameraError(null);
+
+      setCameraOpen(true);
+
+
+      try {
+
+        if (
+          !navigator.mediaDevices ||
+          !navigator.mediaDevices.getUserMedia
+        ) {
+
+          throw new Error(
+            "Camera access is not supported in this browser."
+          );
+
+        }
+
+
+        const stream =
+          await navigator.mediaDevices.getUserMedia({
+
+            video: {
+
+              facingMode: {
+                ideal: "environment",
+              },
+
+            },
+
+            audio: false,
+
+          });
+
+
+        streamRef.current =
+          stream;
+
+
+        if (videoRef.current) {
+
+          videoRef.current.srcObject =
+            stream;
+
+        }
+
+      }
+
+      catch (error) {
+
+        console.error(
+          "Camera error:",
+          error
+        );
+
+
+        setCameraError(
+          "Unable to access camera. Please allow camera permission and try again."
+        );
+
+      }
+
+    };
+
+
+  // ============================================================
+  // STOP CAMERA
+  // ============================================================
+
+  const stopCamera = () => {
+
+    if (
+      streamRef.current
+    ) {
+
+      streamRef.current
+        .getTracks()
+        .forEach(
+          (track) =>
+            track.stop()
+        );
+
+      streamRef.current =
+        null;
+
+    }
+
+
+    if (
+      videoRef.current
+    ) {
+
+      videoRef.current.srcObject =
+        null;
+
+    }
+
+  };
+
+
+  // ============================================================
+  // CLOSE CAMERA
+  // ============================================================
+
+  const closeCamera = () => {
+
+    stopCamera();
+
+    setCameraOpen(false);
+
+    setCameraError(null);
+
+  };
+
+
+  // ============================================================
+  // CAPTURE CAMERA IMAGE
+  // ============================================================
+
+  const captureImage = () => {
+
+    const video =
+      videoRef.current;
+
+    const canvas =
+      canvasRef.current;
+
+
+    if (
+      !video ||
+      !canvas
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      !video.videoWidth ||
+      !video.videoHeight
+    ) {
+
+      setCameraError(
+        "Camera is still loading. Please wait a moment."
+      );
+
+      return;
+
+    }
+
+
+    canvas.width =
+      video.videoWidth;
+
+    canvas.height =
+      video.videoHeight;
+
+
+    const context =
+      canvas.getContext("2d");
+
+
+    context.drawImage(
+
+      video,
+
+      0,
+
+      0,
+
+      canvas.width,
+
+      canvas.height
+
+    );
+
+
+    canvas.toBlob(
+
+      (blob) => {
+
+        if (!blob) {
+
+          setCameraError(
+            "Failed to capture image."
+          );
+
+          return;
+
+        }
+
+
+        const timestamp =
+          Date.now();
+
+
+        const capturedFile =
+          new File(
+
+            [blob],
+
+            `camera_capture_${timestamp}.jpg`,
+
+            {
+              type: "image/jpeg",
+
+              lastModified:
+                timestamp,
+            }
+
+          );
+
+
+        // IMPORTANT:
+        // Camera image enters the SAME
+        // images array as uploaded images.
+
+        handleFiles(
+          [capturedFile]
+        );
+
+
+        closeCamera();
+
+      },
+
+      "image/jpeg",
+
+      0.92
+
+    );
+
+  };
+
+
+  // ============================================================
+  // DRAG EVENTS
+  // ============================================================
+
+  const handleDragOver =
+    (event) => {
+
+      event.preventDefault();
+
+      event.stopPropagation();
+
+
+      if (!loading) {
+
+        setIsDragging(true);
+
+      }
+
+    };
+
+
+  const handleDragLeave =
+    (event) => {
+
+      event.preventDefault();
+
+      event.stopPropagation();
+
+      setIsDragging(false);
+
+    };
+
+
+  const handleDrop =
+    (event) => {
+
+      event.preventDefault();
+
+      event.stopPropagation();
+
+      setIsDragging(false);
+
+
+      if (loading) {
+
+        return;
+
+      }
+
+
+      const droppedFiles =
+        event.dataTransfer?.files;
+
+
+      if (
+        droppedFiles &&
+        droppedFiles.length > 0
+      ) {
+
+        handleFiles(
+          droppedFiles
+        );
+
+      }
+
+    };
+
+
+  // ============================================================
+  // REMOVE IMAGE
+  // ============================================================
+
+  const handleRemoveImage =
+    (indexToRemove) => {
+
+      setImages(
+        (previousImages) =>
+          previousImages.filter(
+            (_, index) =>
+              index !== indexToRemove
+          )
+      );
+
+    };
+
+
+  // ============================================================
+  // REMOVE ALL
+  // ============================================================
+
+  const handleRemoveAllImages = () => {
+
+    setImages([]);
+
+    setErrors(
+      (prev) => {
+
+        const next = {
+          ...prev,
+        };
+
+        delete next.image;
+
+        return next;
+
+      }
+    );
+
+
+    if (
+      fileInputRef.current
+    ) {
+
+      fileInputRef.current.value =
+        "";
+
+    }
+
+  };
+
+
+  // ============================================================
+  // FILE SIZE
+  // ============================================================
+
+  const formatFileSize =
+    (bytes) => {
+
+      if (!bytes) {
+
+        return "0 B";
+
+      }
+
+
+      const kb =
+        1024;
+
+
+      const sizes = [
+
+        "B",
+
+        "KB",
+
+        "MB",
+
+        "GB",
+
+      ];
+
+
+      const index =
+        Math.floor(
+          Math.log(bytes) /
+          Math.log(kb)
+        );
+
+
+      return (
+
+        parseFloat(
+
+          (
+            bytes /
+            Math.pow(
+              kb,
+              index
+            )
+          ).toFixed(1)
+
+        )
+
+        +
+
+        " "
+
+        +
+
+        sizes[index]
+
+      );
+
+    };
+
+
+  // ============================================================
+  // SUBMIT
+  // ============================================================
+
+  const handleSubmit =
+    (event) => {
+
+      event.preventDefault();
+
+
+      const newErrors = {};
+
+
+      const trimmedLocation =
+        location.trim();
+
+
+      if (!trimmedLocation) {
+
+        newErrors.location =
+          "Please enter the incident location.";
+
+      }
+
+
+      if (
+        !images ||
+        images.length === 0
+      ) {
+
+        newErrors.image =
+          "Please upload or capture at least one incident image.";
+
+      }
+
+
+      if (
+        Object.keys(
+          newErrors
+        ).length > 0
+      ) {
+
+        setErrors(
+          newErrors
+        );
+
+        return;
+
+      }
+
+
+      setErrors({});
+
+
+      // ========================================================
+      // IMPORTANT:
+      // Send images array.
+      // Dashboard sends every image as "images".
+      // ========================================================
+
+      onAnalyze({
+
+        location:
+          trimmedLocation,
+
+        description:
+          description.trim(),
+
+        images:
+          images,
+
+      });
+
+    };
+
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      {/* Header Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-t-2xl p-6 sm:p-8">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-red-600/10 border border-red-500/30 text-red-500">
-            <FaExclamationCircle className="text-xl" />
+
+    <div className="
+      w-full
+      max-w-5xl
+      mx-auto
+    ">
+
+
+      {/* ====================================================== */}
+      {/* CAMERA MODAL */}
+      {/* ====================================================== */}
+
+      {cameraOpen && (
+
+        <div className="
+          fixed
+          inset-0
+          z-50
+          bg-black/80
+          backdrop-blur-sm
+          flex
+          items-center
+          justify-center
+          p-4
+        ">
+
+          <div className="
+            w-full
+            max-w-2xl
+            bg-slate-950
+            border
+            border-slate-700
+            rounded-2xl
+            shadow-2xl
+            overflow-hidden
+          ">
+
+
+            <div className="
+              flex
+              items-center
+              justify-between
+              p-4
+              border-b
+              border-slate-800
+            ">
+
+              <div>
+
+                <h3 className="
+                  text-lg
+                  font-bold
+                  text-white
+                ">
+
+                  Capture Incident Image
+
+                </h3>
+
+                <p className="
+                  text-xs
+                  text-slate-400
+                  mt-1
+                ">
+
+                  Take a photograph and it will be added to the incident images.
+
+                </p>
+
+              </div>
+
+
+              <button
+                type="button"
+                onClick={closeCamera}
+                className="
+                  p-2
+                  rounded-lg
+                  text-slate-400
+                  hover:text-white
+                  hover:bg-slate-800
+                "
+              >
+
+                <FaTimes />
+
+              </button>
+
+            </div>
+
+
+            <div className="
+              p-4
+            ">
+
+
+              {cameraError ? (
+
+                <div className="
+                  p-4
+                  rounded-xl
+                  bg-red-950/40
+                  border
+                  border-red-800
+                  text-red-300
+                  text-sm
+                ">
+
+                  {cameraError}
+
+                </div>
+
+              ) : (
+
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="
+                    w-full
+                    max-h-[65vh]
+                    object-cover
+                    rounded-xl
+                    bg-black
+                  "
+                />
+
+              )}
+
+
+              <canvas
+                ref={canvasRef}
+                className="hidden"
+              />
+
+            </div>
+
+
+            <div className="
+              flex
+              justify-end
+              gap-3
+              p-4
+              border-t
+              border-slate-800
+            ">
+
+              <button
+                type="button"
+                onClick={closeCamera}
+                className="
+                  px-4
+                  py-2.5
+                  rounded-xl
+                  border
+                  border-slate-700
+                  text-slate-300
+                  hover:bg-slate-800
+                  text-sm
+                  font-semibold
+                "
+              >
+
+                Cancel
+
+              </button>
+
+
+              <button
+                type="button"
+                onClick={captureImage}
+                disabled={!!cameraError}
+                className="
+                  px-5
+                  py-2.5
+                  rounded-xl
+                  bg-red-600
+                  hover:bg-red-500
+                  disabled:opacity-50
+                  text-white
+                  text-sm
+                  font-bold
+                  flex
+                  items-center
+                  gap-2
+                "
+              >
+
+                <FaCamera />
+
+                Capture Image
+
+              </button>
+
+            </div>
+
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              Report Incident
-            </h2>
-            <p className="text-sm text-slate-400 mt-1">
-              Provide incident location and photographic evidence for AI decision intelligence and coordinated response planning.
-            </p>
-          </div>
+
         </div>
+
+      )}
+
+
+      {/* ====================================================== */}
+      {/* HEADER */}
+      {/* ====================================================== */}
+
+      <div className="
+        bg-slate-900
+        border
+        border-slate-800
+        rounded-t-2xl
+        p-6
+        sm:p-8
+      ">
+
+        <div className="
+          flex
+          items-center
+          gap-3
+        ">
+
+          <div className="
+            p-3
+            rounded-xl
+            bg-red-600/10
+            border
+            border-red-500/30
+            text-red-400
+          ">
+
+            <FaExclamationCircle />
+
+          </div>
+
+
+          <div>
+
+            <h2 className="
+              text-2xl
+              font-bold
+              text-white
+            ">
+
+              Report Disaster Incident
+
+            </h2>
+
+            <p className="
+              text-sm
+              text-slate-400
+              mt-1
+            ">
+
+              Upload or capture incident images for AI-powered disaster analysis.
+
+            </p>
+
+          </div>
+
+        </div>
+
       </div>
 
-      {/* Main Form Body */}
-      <div className="bg-slate-950 border-x border-b border-slate-800 rounded-b-2xl p-6 sm:p-8 shadow-2xl">
-        {/* Global API Error Alert */}
-        <AnimatePresence>
-          {apiError && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mb-6 p-4 rounded-xl bg-red-950/40 border border-red-800/80 text-red-300 flex items-start gap-3 text-sm"
-              role="alert"
-            >
-              <FaExclamationCircle className="text-red-400 text-lg mt-0.5 shrink-0" />
-              <div>
-                <p className="font-semibold text-red-200">Analysis Request Failed</p>
-                <p className="text-red-300/90 mt-0.5">{apiError}</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
-        <form onSubmit={handleSubmit} className="space-y-7" noValidate>
-          {/* FIELD 1: LOCATION */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="disaster-location"
-                className="text-sm font-semibold text-slate-200 flex items-center gap-2"
-              >
-                <FaMapMarkerAlt className="text-red-500 text-xs" />
-                <span>Incident Location</span>
-                <span className="text-xs text-red-400 font-normal">*Required</span>
-              </label>
+      {/* ====================================================== */}
+      {/* FORM */}
+      {/* ====================================================== */}
+
+      <div className="
+        bg-slate-950
+        border-x
+        border-b
+        border-slate-800
+        rounded-b-2xl
+        p-6
+        sm:p-8
+      ">
+
+
+        {/* ==================================================== */}
+        {/* API ERROR */}
+        {/* ==================================================== */}
+
+        {apiError && (
+
+          <div className="
+            mb-6
+            p-4
+            rounded-xl
+            bg-red-950/40
+            border
+            border-red-800
+            text-red-300
+            text-sm
+            flex
+            gap-3
+          ">
+
+            <FaExclamationCircle className="
+              mt-0.5
+              shrink-0
+            " />
+
+            <div>
+
+              <p className="
+                font-bold
+              ">
+
+                Analysis Failed
+
+              </p>
+
+              <p className="
+                mt-1
+              ">
+
+                {apiError}
+
+              </p>
+
             </div>
 
-            <p className="text-xs text-slate-400">
-              City, district, landmark, or street address for geolocation and route calculation.
-            </p>
-
-            <input
-              id="disaster-location"
-              type="text"
-              value={location}
-              onChange={(e) => {
-                setLocation(e.target.value);
-                if (errors.location) {
-                  setErrors((prev) => {
-                    const next = { ...prev };
-                    delete next.location;
-                    return next;
-                  });
-                }
-              }}
-              disabled={loading}
-              placeholder="e.g. Pune, Maharashtra or Downtown Riverfront"
-              className={`
-                w-full px-4 py-3.5 rounded-xl bg-slate-900 border text-slate-100 text-sm placeholder:text-slate-500
-                focus:outline-none focus:ring-2 transition duration-200
-                ${
-                  errors.location
-                    ? "border-red-500 focus:ring-red-500/50"
-                    : "border-slate-800 focus:border-slate-600 focus:ring-slate-700/50"
-                }
-                ${loading ? "opacity-60 cursor-not-allowed" : ""}
-              `}
-              aria-required="true"
-              aria-invalid={errors.location ? "true" : "false"}
-            />
-
-            {errors.location && (
-              <p className="text-xs text-red-400 flex items-center gap-1.5 pt-1">
-                <FaExclamationCircle className="shrink-0" />
-                <span>{errors.location}</span>
-              </p>
-            )}
           </div>
 
-          {/* FIELD 2: IMAGE UPLOAD */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                <FaCamera className="text-red-500 text-xs" />
-                <span>Incident Imagery</span>
-                <span className="text-xs text-red-400 font-normal">*Required</span>
-              </label>
-              <span className="text-xs text-slate-500 font-mono">Max 10 MB</span>
-            </div>
+        )}
 
-            <p className="text-xs text-slate-400">
-              Visual evidence analyzed by AI vision for disaster categorization, severity, and hazard identification.
-            </p>
 
-            {/* Hidden native file input */}
+        <form
+          onSubmit={handleSubmit}
+          className="
+            space-y-7
+          "
+          noValidate
+        >
+
+
+          {/* ================================================== */}
+          {/* LOCATION */}
+          {/* ================================================== */}
+
+          <div>
+
+            <label className="
+              text-sm
+              font-semibold
+              text-slate-200
+              flex
+              items-center
+              gap-2
+              mb-2
+            ">
+
+              <FaMapMarkerAlt className="
+                text-red-500
+              " />
+
+              Incident Location
+
+              <span className="
+                text-red-400
+              ">
+
+                *
+
+              </span>
+
+            </label>
+
+
             <input
-              ref={fileInputRef}
-              id="disaster-image-input"
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={(e) => handleFileSelect(e.target.files?.[0])}
+              type="text"
+              value={location}
+              onChange={(event) => {
+
+                setLocation(
+                  event.target.value
+                );
+
+
+                if (
+                  errors.location
+                ) {
+
+                  setErrors(
+                    (prev) => {
+
+                      const next = {
+                        ...prev,
+                      };
+
+                      delete next.location;
+
+                      return next;
+
+                    }
+                  );
+
+                }
+
+              }}
               disabled={loading}
+              placeholder="e.g. Pune, Maharashtra"
+              className={`
+                w-full
+                px-4
+                py-3.5
+                rounded-xl
+                bg-slate-900
+                border
+                text-white
+                placeholder:text-slate-500
+                outline-none
+                transition
+
+                ${
+                  errors.location
+                    ? "border-red-500"
+                    : "border-slate-700 focus:border-slate-500"
+                }
+              `}
             />
 
-            {/* Upload Area / Preview */}
-            {!image ? (
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => !loading && fileInputRef.current?.click()}
-                className={`
-                  border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200
-                  flex flex-col items-center justify-center gap-3
-                  ${
-                    isDragging
-                      ? "border-red-500 bg-red-950/20"
-                      : errors.image
-                      ? "border-red-800 bg-red-950/10 hover:border-red-700"
-                      : "border-slate-800 bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900"
-                  }
-                  ${loading ? "opacity-60 cursor-not-allowed" : ""}
-                `}
-              >
-                <div className="p-3.5 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700/50">
-                  <FaCloudUploadAlt className="text-2xl" />
-                </div>
 
-                <div>
-                  <p className="text-sm font-medium text-slate-200">
-                    Click to browse or drag and drop an image
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Supports all standard image formats up to 10 MB
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                {/* Live Preview Thumbnail */}
-                {previewUrl && (
-                  <img
-                    src={previewUrl}
-                    alt="Uploaded incident preview"
-                    className="w-24 h-24 sm:w-20 sm:h-20 object-cover rounded-lg border border-slate-700 shrink-0 bg-slate-950"
-                  />
-                )}
+            {errors.location && (
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-200 truncate">
-                    {image.name}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {formatFileSize(image.size)} • {image.type || "Image"}
-                  </p>
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium mt-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span>Ready for AI vision analysis</span>
-                  </div>
-                </div>
+              <p className="
+                mt-2
+                text-xs
+                text-red-400
+              ">
+
+                {errors.location}
+
+              </p>
+
+            )}
+
+          </div>
+
+
+          {/* ================================================== */}
+          {/* DESCRIPTION */}
+          {/* ================================================== */}
+
+          <div>
+
+            <label className="
+              block
+              text-sm
+              font-semibold
+              text-slate-200
+              mb-2
+            ">
+
+              Incident Description
+
+              <span className="
+                text-slate-500
+                font-normal
+              ">
+
+                {" "}
+                (Optional)
+
+              </span>
+
+            </label>
+
+
+            <textarea
+              value={description}
+              onChange={(event) =>
+                setDescription(
+                  event.target.value
+                )
+              }
+              disabled={loading}
+              rows={4}
+              placeholder="Describe what happened..."
+              className="
+                w-full
+                px-4
+                py-3.5
+                rounded-xl
+                bg-slate-900
+                border
+                border-slate-700
+                text-white
+                placeholder:text-slate-500
+                outline-none
+                focus:border-slate-500
+                resize-none
+              "
+            />
+
+          </div>
+
+
+          {/* ================================================== */}
+          {/* HIDDEN FILE INPUT */}
+          {/* ================================================== */}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+
+              handleFiles(
+                event.target.files
+              );
+
+              event.target.value = "";
+
+            }}
+          />
+
+
+          {/* ================================================== */}
+          {/* IMAGE UPLOAD */}
+          {/* ================================================== */}
+
+          <div>
+
+            <div className="
+              flex
+              items-center
+              justify-between
+              gap-4
+              mb-3
+            ">
+
+              <label className="
+                text-sm
+                font-semibold
+                text-slate-200
+                flex
+                items-center
+                gap-2
+              ">
+
+                <FaImages className="
+                  text-red-500
+                " />
+
+                Incident Images
+
+                <span className="
+                  text-red-400
+                ">
+
+                  *
+
+                </span>
+
+              </label>
+
+
+              <span className="
+                text-xs
+                text-slate-500
+              ">
+
+                {images.length} selected
+
+              </span>
+
+            </div>
+
+
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`
+                border-2
+                border-dashed
+                rounded-2xl
+                p-8
+                text-center
+                transition
+
+                ${
+                  isDragging
+                    ? "border-red-500 bg-red-950/20"
+                    : errors.image
+                      ? "border-red-700 bg-red-950/10"
+                      : "border-slate-700 bg-slate-900/50"
+                }
+              `}
+            >
+
+              <FaCloudUploadAlt className="
+                mx-auto
+                text-3xl
+                text-slate-400
+                mb-3
+              " />
+
+
+              <p className="
+                text-sm
+                font-semibold
+                text-slate-200
+              ">
+
+                Drag and drop disaster images here
+
+              </p>
+
+
+              <p className="
+                text-xs
+                text-slate-500
+                mt-2
+              ">
+
+                JPG, PNG, WEBP • Maximum 10 MB per image
+
+              </p>
+
+
+              <div className="
+                flex
+                flex-col
+                sm:flex-row
+                justify-center
+                gap-3
+                mt-5
+              ">
+
 
                 <button
                   type="button"
-                  onClick={handleRemoveImage}
+                  onClick={handleBrowseImages}
                   disabled={loading}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-red-950/60 hover:text-red-300 text-slate-400 text-xs font-semibold transition flex items-center gap-1.5 border border-slate-700 hover:border-red-800"
+                  className="
+                    px-5
+                    py-3
+                    rounded-xl
+                    bg-slate-800
+                    hover:bg-slate-700
+                    border
+                    border-slate-700
+                    text-white
+                    text-sm
+                    font-semibold
+                    flex
+                    items-center
+                    justify-center
+                    gap-2
+                  "
                 >
-                  <FaTrashAlt />
-                  <span>Remove</span>
+
+                  <FaImages />
+
+                  Browse Images
+
                 </button>
+
+
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  disabled={loading}
+                  className="
+                    px-5
+                    py-3
+                    rounded-xl
+                    bg-red-600/10
+                    hover:bg-red-600/20
+                    border
+                    border-red-500/40
+                    text-red-300
+                    text-sm
+                    font-semibold
+                    flex
+                    items-center
+                    justify-center
+                    gap-2
+                  "
+                >
+
+                  <FaCamera />
+
+                  Use Camera
+
+                </button>
+
               </div>
-            )}
 
-            {errors.image && (
-              <p className="text-xs text-red-400 flex items-center gap-1.5 pt-1">
-                <FaExclamationCircle className="shrink-0" />
-                <span>{errors.image}</span>
-              </p>
-            )}
-          </div>
-
-          {/* FIELD 3: DESCRIPTION (OPTIONAL) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="disaster-description"
-                className="text-sm font-semibold text-slate-200 flex items-center gap-2"
-              >
-                <FaFileAlt className="text-slate-400 text-xs" />
-                <span>Incident Description</span>
-                <span className="text-xs text-slate-500 font-normal">Optional</span>
-              </label>
             </div>
 
-            <p className="text-xs text-slate-400">
-              Provide additional situational details, eyewitness observations, or specific emergency context.
-            </p>
 
-            <textarea
-              id="disaster-description"
-              rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={loading}
-              placeholder="Describe ongoing conditions, trapped individuals, observed infrastructure hazards, or environmental factors..."
-              className={`
-                w-full px-4 py-3.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm placeholder:text-slate-500
-                focus:outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-700/50 resize-none transition duration-200
-                ${loading ? "opacity-60 cursor-not-allowed" : ""}
-              `}
-            />
+            {errors.image && (
+
+              <p className="
+                mt-2
+                text-xs
+                text-red-400
+              ">
+
+                {errors.image}
+
+              </p>
+
+            )}
+
+
+            {/* ================================================ */}
+            {/* IMAGE PREVIEWS */}
+            {/* ================================================ */}
+
+            {images.length > 0 && (
+
+              <div className="
+                mt-6
+              ">
+
+
+                <div className="
+                  flex
+                  justify-between
+                  items-center
+                  mb-3
+                ">
+
+                  <p className="
+                    text-sm
+                    font-semibold
+                    text-slate-300
+                  ">
+
+                    Selected Images
+
+                  </p>
+
+
+                  <button
+                    type="button"
+                    onClick={
+                      handleRemoveAllImages
+                    }
+                    disabled={loading}
+                    className="
+                      text-xs
+                      text-red-400
+                      hover:text-red-300
+                    "
+                  >
+
+                    Remove All
+
+                  </button>
+
+                </div>
+
+
+                <div className="
+                  grid
+                  grid-cols-2
+                  sm:grid-cols-3
+                  lg:grid-cols-4
+                  gap-4
+                ">
+
+                  {images.map(
+                    (image, index) => (
+
+                      <div
+                        key={`${image.name}-${index}`}
+                        className="
+                          relative
+                          rounded-xl
+                          overflow-hidden
+                          border
+                          border-slate-700
+                          bg-slate-900
+                        "
+                      >
+
+                        <img
+                          src={
+                            previewUrls[index]
+                          }
+                          alt={
+                            image.name
+                          }
+                          className="
+                            w-full
+                            aspect-square
+                            object-cover
+                          "
+                        />
+
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRemoveImage(
+                              index
+                            )
+                          }
+                          disabled={loading}
+                          className="
+                            absolute
+                            top-2
+                            right-2
+                            w-8
+                            h-8
+                            rounded-full
+                            bg-black/70
+                            hover:bg-red-600
+                            text-white
+                            flex
+                            items-center
+                            justify-center
+                          "
+                        >
+
+                          <FaTrashAlt />
+
+                        </button>
+
+
+                        <div className="
+                          p-2
+                        ">
+
+                          <p className="
+                            text-xs
+                            text-slate-300
+                            truncate
+                          ">
+
+                            {image.name}
+
+                          </p>
+
+                          <p className="
+                            text-[10px]
+                            text-slate-500
+                            mt-1
+                          ">
+
+                            {formatFileSize(
+                              image.size
+                            )}
+
+                          </p>
+
+                        </div>
+
+                      </div>
+
+                    )
+                  )}
+
+                </div>
+
+              </div>
+
+            )}
+
           </div>
 
-          {/* SUBMIT BUTTON */}
-          <div className="pt-2">
-            <motion.button
-              type="submit"
-              disabled={loading}
-              whileHover={loading ? {} : { scale: 1.01 }}
-              whileTap={loading ? {} : { scale: 0.99 }}
-              className={`
-                w-full py-4 rounded-xl font-bold text-white shadow-xl flex items-center justify-center gap-2.5 text-base tracking-wide transition-all duration-200 cursor-pointer
-                ${
-                  loading
-                    ? "bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed"
-                    : "bg-red-600 hover:bg-red-500 shadow-red-950/60 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 focus:ring-offset-slate-950"
-                }
-              `}
-            >
-              {loading ? (
-                <>
-                  <FaSpinner className="animate-spin text-lg" />
-                  <span>Analyzing Incident with SwarmAI...</span>
-                </>
-              ) : (
-                <>
-                  <span>Analyze Incident</span>
-                  <FaArrowRight className="text-sm" />
-                </>
-              )}
-            </motion.button>
-          </div>
+
+          {/* ================================================== */}
+          {/* SUBMIT */}
+          {/* ================================================== */}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="
+              w-full
+              py-4
+              rounded-xl
+              bg-red-600
+              hover:bg-red-500
+              disabled:opacity-60
+              disabled:cursor-not-allowed
+              text-white
+              font-bold
+              flex
+              items-center
+              justify-center
+              gap-3
+              transition
+            "
+          >
+
+            {loading ? (
+
+              <>
+
+                <FaSpinner className="
+                  animate-spin
+                " />
+
+                Analyzing Disaster...
+
+              </>
+
+            ) : (
+
+              <>
+
+                Analyze Incident
+
+                <FaArrowRight />
+
+              </>
+
+            )}
+
+          </button>
+
         </form>
+
       </div>
+
     </div>
+
   );
+
 }

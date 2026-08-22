@@ -1,3 +1,4 @@
+
 import uuid
 import json
 import urllib.parse
@@ -17,12 +18,30 @@ from services.disaster_analyzer import (
     analyze_disaster_image
 )
 
+from services.image_validator import (
+    validate_disaster_images
+)
+
 from orchestrator.langgraph_orchestrator import (
     graph
 )
 
 
 router = APIRouter()
+
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+}
 
 
 # ============================================================
@@ -37,31 +56,50 @@ def geocode_location(location: str):
         print(f"📍 Location: {location}")
 
         query = urllib.parse.urlencode({
+
             "q": location,
+
             "format": "json",
+
             "limit": 1
+
         })
 
         url = (
+
             "https://nominatim.openstreetmap.org/search?"
+
             + query
+
         )
 
         request = urllib.request.Request(
+
             url,
+
             headers={
+
                 "User-Agent":
                     "SwarmAI-Disaster-System/1.0"
+
             }
+
         )
 
         with urllib.request.urlopen(
+
             request,
+
             timeout=10
+
         ) as response:
 
             data = json.loads(
-                response.read().decode("utf-8")
+
+                response.read().decode(
+                    "utf-8"
+                )
+
             )
 
         if not data:
@@ -129,7 +167,9 @@ async def broadcast_disaster_data(data):
 
         try:
 
-            await websocket.send_json(data)
+            await websocket.send_json(
+                data
+            )
 
             print(
                 "✅ WebSocket payload sent"
@@ -192,7 +232,7 @@ async def disaster_websocket(
         )
 
         # ----------------------------------------------------
-        # SEND CONNECTION MESSAGE
+        # CONNECTION MESSAGE
         # ----------------------------------------------------
 
         await websocket.send_json({
@@ -257,7 +297,7 @@ async def analyze_disaster(
 
     description: str = Form(""),
 
-    image: UploadFile = File(...)
+    images: list[UploadFile] = File(...)
 
 ):
 
@@ -265,13 +305,14 @@ async def analyze_disaster(
     print("=" * 70)
 
     print(
-        "🚨 NEW DISASTER INPUT RECEIVED"
+        "🚨 NEW MULTI-IMAGE DISASTER INPUT RECEIVED"
     )
 
     print("=" * 70)
 
+
     # ========================================================
-    # LOCATION
+    # LOCATION VALIDATION
     # ========================================================
 
     location = location.strip()
@@ -279,13 +320,17 @@ async def analyze_disaster(
     if not location:
 
         raise HTTPException(
+
             status_code=400,
+
             detail="Disaster location is required."
+
         )
 
     print(
         f"📍 Location: {location}"
     )
+
 
     # ========================================================
     # DESCRIPTION
@@ -297,102 +342,397 @@ async def analyze_disaster(
         f"📝 Description: {description}"
     )
 
+
     # ========================================================
-    # IMAGE VALIDATION
+    # IMAGE COUNT VALIDATION
     # ========================================================
 
-    if image is None:
+    if not images:
 
         raise HTTPException(
+
             status_code=400,
-            detail="Disaster image is required."
+
+            detail="At least one disaster image is required."
+
         )
 
     print(
-        f"📷 Image: {image.filename}"
+        f"📷 Total uploaded images: "
+        f"{len(images)}"
     )
+
+
+    # ========================================================
+    # READ AND VALIDATE IMAGES
+    # ========================================================
+
+    prepared_images = []
+
+    upload_validation = []
+
+    for index, image in enumerate(
+        images,
+        start=1
+    ):
+
+        print("\n")
+        print(
+            f"📷 PROCESSING IMAGE {index}"
+        )
+
+        filename = (
+
+            image.filename
+
+            or
+
+            f"image_{index}"
+
+        )
+
+        content_type = image.content_type
+
+
+        # ----------------------------------------------------
+        # CONTENT TYPE
+        # ----------------------------------------------------
+
+        if not content_type:
+
+            upload_validation.append({
+
+                "image_index":
+                    index,
+
+                "filename":
+                    filename,
+
+                "accepted":
+                    False,
+
+                "reason":
+                    "Unable to determine image type."
+
+            })
+
+            continue
+
+
+        if content_type not in ALLOWED_IMAGE_TYPES:
+
+            upload_validation.append({
+
+                "image_index":
+                    index,
+
+                "filename":
+                    filename,
+
+                "accepted":
+                    False,
+
+                "reason":
+                    "Unsupported image format."
+
+            })
+
+            continue
+
+
+        # ----------------------------------------------------
+        # READ IMAGE
+        # ----------------------------------------------------
+
+        try:
+
+            image_bytes = await image.read()
+
+        except Exception as e:
+
+            print(
+                "❌ IMAGE READ ERROR:",
+                e
+            )
+
+            upload_validation.append({
+
+                "image_index":
+                    index,
+
+                "filename":
+                    filename,
+
+                "accepted":
+                    False,
+
+                "reason":
+                    "Unable to read uploaded image."
+
+            })
+
+            continue
+
+
+        # ----------------------------------------------------
+        # EMPTY IMAGE
+        # ----------------------------------------------------
+
+        if len(image_bytes) == 0:
+
+            upload_validation.append({
+
+                "image_index":
+                    index,
+
+                "filename":
+                    filename,
+
+                "accepted":
+                    False,
+
+                "reason":
+                    "Uploaded image is empty."
+
+            })
+
+            continue
+
+
+        # ----------------------------------------------------
+        # IMAGE SIZE
+        # ----------------------------------------------------
+
+        if len(image_bytes) > MAX_IMAGE_SIZE:
+
+            upload_validation.append({
+
+                "image_index":
+                    index,
+
+                "filename":
+                    filename,
+
+                "accepted":
+                    False,
+
+                "reason":
+                    "Image exceeds the 10 MB limit."
+
+            })
+
+            continue
+
+
+        # ----------------------------------------------------
+        # VALID IMAGE
+        # ----------------------------------------------------
+
+        print(
+            f"   Filename: {filename}"
+        )
+
+        print(
+            f"   Type: {content_type}"
+        )
+
+        print(
+            f"   Size: {len(image_bytes)} bytes"
+        )
+
+        prepared_images.append({
+
+            "image_index":
+                index,
+
+            "filename":
+                filename,
+
+            "content_type":
+                content_type,
+
+            "image_bytes":
+                image_bytes
+
+        })
+
+        upload_validation.append({
+
+            "image_index":
+                index,
+
+            "filename":
+                filename,
+
+            "accepted":
+                True,
+
+            "reason":
+                "Passed file validation."
+
+        })
+
+
+    # ========================================================
+    # CHECK VALID UPLOADS
+    # ========================================================
+
+    if not prepared_images:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail={
+
+                "message":
+                    "No valid images were uploaded.",
+
+                "images":
+                    upload_validation
+
+            }
+
+        )
+
+
+    # ========================================================
+    # LIGHTWEIGHT IMAGE VALIDATION
+    # ========================================================
+
+    print("\n")
+    print("=" * 70)
 
     print(
-        f"📷 Content Type: "
-        f"{image.content_type}"
+        "🔍 STARTING DISASTER IMAGE VALIDATION"
     )
 
-    if not image.content_type:
+    print("=" * 70)
 
-        raise HTTPException(
-            status_code=400,
-            detail="Unable to determine image type."
-        )
-
-    if not image.content_type.startswith("image/"):
-
-        raise HTTPException(
-            status_code=400,
-            detail="Uploaded file must be an image."
-        )
-
-    # ========================================================
-    # READ IMAGE
-    # ========================================================
 
     try:
 
-        image_bytes = await image.read()
+        validation_result = (
+
+            await validate_disaster_images(
+
+                images=prepared_images
+
+            )
+
+        )
 
     except Exception as e:
 
         print(
-            "❌ IMAGE READ ERROR:",
+            "\n❌ IMAGE VALIDATOR FAILED"
+        )
+
+        print(
+            "Error:",
             e
         )
 
         raise HTTPException(
-            status_code=400,
-            detail="Unable to read uploaded image."
+
+            status_code=500,
+
+            detail=
+                "Image validation service failed."
+
         )
 
-    print(
-        f"📦 Image Size: "
-        f"{len(image_bytes)} bytes"
+
+    # ========================================================
+    # EXTRACT VALID / REJECTED IMAGES
+    # ========================================================
+
+    valid_images = validation_result.get(
+
+        "valid_images",
+
+        []
+
     )
 
+    rejected_images = validation_result.get(
+
+        "rejected_images",
+
+        []
+
+    )
+
+
+    print(
+        f"\n✅ Disaster-related images: "
+        f"{len(valid_images)}"
+    )
+
+    print(
+        f"❌ Rejected images: "
+        f"{len(rejected_images)}"
+    )
+
+
     # ========================================================
-    # IMAGE SIZE
+    # STOP IF ALL IMAGES ARE REJECTED
     # ========================================================
 
-    max_size = 10 * 1024 * 1024
-
-    if len(image_bytes) == 0:
+    if not valid_images:
 
         raise HTTPException(
-            status_code=400,
-            detail="Uploaded image is empty."
+
+            status_code=422,
+
+            detail={
+
+                "message":
+                    "None of the uploaded images appear "
+                    "to be related to a disaster or emergency.",
+
+                "total_images":
+                    len(images),
+
+                "valid_images":
+                    0,
+
+                "rejected_images":
+                    rejected_images
+
+            }
+
         )
 
-    if len(image_bytes) > max_size:
-
-        raise HTTPException(
-            status_code=413,
-            detail="Image must be smaller than 10 MB."
-        )
 
     # ========================================================
-    # AI ANALYSIS
+    # AI DISASTER ANALYSIS
     # ========================================================
 
-    print("\n🧠 Sending image to Groq Vision...")
+    print("\n")
+    print("=" * 70)
+
+    print(
+        "🧠 SENDING VALID IMAGES "
+        "TO DISASTER ANALYZER"
+    )
+
+    print("=" * 70)
+
 
     try:
 
-        analysis = await analyze_disaster_image(
+        analysis = (
 
-            image_bytes=image_bytes,
+            await analyze_disaster_image(
 
-            content_type=image.content_type,
+                images=valid_images,
 
-            location=location,
+                location=location,
 
-            description=description
+                description=description
+
+            )
 
         )
 
@@ -408,29 +748,80 @@ async def analyze_disaster(
         )
 
         raise HTTPException(
+
             status_code=500,
-            detail="AI disaster analysis failed."
+
+            detail=
+                "AI disaster analysis failed."
+
         )
 
+
+    # ========================================================
+    # CHECK FINAL DISASTER RELEVANCE
+    # ========================================================
+
+    if not analysis.get(
+        "disaster_relevant",
+        False
+    ):
+
+        raise HTTPException(
+
+            status_code=422,
+
+            detail={
+
+                "message":
+                    "The uploaded images could not be "
+                    "verified as a disaster or emergency.",
+
+                "image_validation":
+                    analysis.get(
+                        "image_validation",
+                        []
+                    )
+
+            }
+
+        )
+
+
+    # ========================================================
+    # LOG AI ANALYSIS
+    # ========================================================
+
     print(
-        "\n🧠 AI ANALYSIS:"
+        "\n🧠 FINAL AI ANALYSIS:"
     )
 
     print(
+
         json.dumps(
+
             analysis,
+
             indent=2,
+
             default=str
+
         )
+
     )
+
 
     # ========================================================
     # GEOCODING
     # ========================================================
 
     latitude, longitude = (
-        geocode_location(location)
+
+        geocode_location(
+            location
+        )
+
     )
+
 
     # ========================================================
     # EVENT ID
@@ -440,48 +831,76 @@ async def analyze_disaster(
         uuid.uuid4()
     )
 
+
     # ========================================================
     # NORMALIZE AI DATA
     # ========================================================
 
     disaster_type = analysis.get(
+
         "disaster_type",
+
         "Unknown Disaster"
+
     )
+
 
     severity = analysis.get(
+
         "severity",
+
         0
+
     )
 
+
     confidence = analysis.get(
+
         "confidence",
+
         0
+
     )
+
 
     victim_estimate = analysis.get(
         "victim_estimate"
     )
 
+
     traffic_impact = analysis.get(
+
         "traffic_impact",
+
         "low"
+
     )
+
 
     traffic_mapping = {
 
-        "low": 30,
+        "low":
+            30,
 
-        "medium": 60,
+        "medium":
+            60,
 
-        "high": 85
+        "high":
+            85
 
     }
 
+
     traffic_level = traffic_mapping.get(
-        str(traffic_impact).lower(),
+
+        str(
+            traffic_impact
+        ).lower(),
+
         30
+
     )
+
 
     # ========================================================
     # EVENT
@@ -511,27 +930,43 @@ async def analyze_disaster(
             confidence,
 
         "observations":
+
             analysis.get(
+
                 "observations",
+
                 []
+
             ),
 
         "hazards":
+
             analysis.get(
+
                 "hazards",
+
                 []
+
             ),
 
         "infrastructure_damage":
+
             analysis.get(
+
                 "infrastructure_damage",
+
                 []
+
             ),
 
         "evacuation_required":
+
             analysis.get(
+
                 "evacuation_required",
+
                 False
+
             ),
 
         "victim_estimate":
@@ -547,19 +982,55 @@ async def analyze_disaster(
             traffic_level,
 
         "medical_access_impact":
+
             analysis.get(
+
                 "medical_access_impact",
+
                 "low"
+
             ),
 
         "summary":
+
             analysis.get(
+
                 "summary",
+
                 ""
+
             ),
 
-        # IMPORTANT
-        # Real geocoded coordinates
+        # ---------------------------------------------------
+        # IMAGE INFORMATION
+        # ---------------------------------------------------
+
+        "total_images":
+            len(images),
+
+        "valid_images":
+            len(valid_images),
+
+        "rejected_images":
+            len(rejected_images),
+
+        "image_validation":
+
+            analysis.get(
+
+                "image_validation",
+
+                []
+
+            ),
+
+        "rejected_image_details":
+            rejected_images,
+
+        # ---------------------------------------------------
+        # LOCATION
+        # ---------------------------------------------------
+
         "latitude":
             latitude,
 
@@ -570,6 +1041,7 @@ async def analyze_disaster(
             "analyzed"
 
     }
+
 
     # ========================================================
     # DEBUG EVENT
@@ -585,12 +1057,19 @@ async def analyze_disaster(
     print("=" * 70)
 
     print(
+
         json.dumps(
+
             event,
+
             indent=2,
+
             default=str
+
         )
+
     )
+
 
     # ========================================================
     # LANGGRAPH
@@ -605,6 +1084,7 @@ async def analyze_disaster(
 
     print("=" * 70)
 
+
     try:
 
         initial_state = {
@@ -617,9 +1097,11 @@ async def analyze_disaster(
 
         }
 
+
         result = graph.invoke(
             initial_state
         )
+
 
     except Exception as e:
 
@@ -633,26 +1115,39 @@ async def analyze_disaster(
         )
 
         raise HTTPException(
+
             status_code=500,
-            detail="Multi-agent disaster analysis failed."
+
+            detail=
+                "Multi-agent disaster analysis failed."
+
         )
+
 
     # ========================================================
     # AGENT RESPONSES
     # ========================================================
 
     agent_responses = result.get(
+
         "responses",
+
         []
+
     )
 
-    print("\n🤖 AGENT RESPONSES:")
+
+    print(
+        "\n🤖 AGENT RESPONSES:"
+    )
+
 
     for response in agent_responses:
 
         print(
             response
         )
+
 
     # ========================================================
     # EXTRACT TRAFFIC ROUTE
@@ -662,40 +1157,68 @@ async def analyze_disaster(
 
     best_route = []
 
+
     for response in agent_responses:
 
-        if not isinstance(response, dict):
+        if not isinstance(
+            response,
+            dict
+        ):
+
             continue
+
 
         traffic_response = response.get(
             "TrafficAgent"
         )
 
+
         if not traffic_response:
+
             continue
 
+
         traffic_response = (
+
             traffic_response.get(
+
                 "traffic_response",
+
                 {}
+
             )
+
         )
+
 
         route_coordinates = (
+
             traffic_response.get(
+
                 "route_coordinates",
+
                 []
+
             )
+
         )
+
 
         best_route = (
+
             traffic_response.get(
+
                 "best_route",
+
                 []
+
             )
+
         )
 
+
         break
+
 
     print(
         "\n🛣️ ROUTE COORDINATES:"
@@ -704,6 +1227,7 @@ async def analyze_disaster(
     print(
         route_coordinates
     )
+
 
     # ========================================================
     # DASHBOARD PAYLOAD
@@ -717,6 +1241,9 @@ async def analyze_disaster(
         "event":
             event,
 
+        "analysis":
+            analysis,
+
         "responses":
             agent_responses,
 
@@ -725,6 +1252,22 @@ async def analyze_disaster(
 
         "best_route":
             best_route,
+
+        "image_processing": {
+
+            "total_images":
+                len(images),
+
+            "accepted_images":
+                len(valid_images),
+
+            "rejected_images":
+                len(rejected_images),
+
+            "rejected_details":
+                rejected_images
+
+        },
 
         "location": {
 
@@ -744,15 +1287,20 @@ async def analyze_disaster(
 
     }
 
+
     # ========================================================
     # BROADCAST
     # ========================================================
 
-    print("\n📡 Broadcasting disaster data...")
+    print(
+        "\n📡 Broadcasting disaster data..."
+    )
+
 
     await broadcast_disaster_data(
         dashboard_payload
     )
+
 
     # ========================================================
     # COMPLETE
@@ -767,6 +1315,21 @@ async def analyze_disaster(
 
     print(
         f"🆔 Event ID: {event_id}"
+    )
+
+    print(
+        f"📷 Uploaded Images: "
+        f"{len(images)}"
+    )
+
+    print(
+        f"✅ Valid Images: "
+        f"{len(valid_images)}"
+    )
+
+    print(
+        f"❌ Rejected Images: "
+        f"{len(rejected_images)}"
     )
 
     print(
@@ -792,6 +1355,7 @@ async def analyze_disaster(
 
     print("=" * 70)
 
+
     # ========================================================
     # API RESPONSE
     # ========================================================
@@ -816,6 +1380,25 @@ async def analyze_disaster(
         "best_route":
             best_route,
 
+        "image_processing": {
+
+            "total_images":
+                len(images),
+
+            "accepted_images":
+                len(valid_images),
+
+            "rejected_images":
+                len(rejected_images),
+
+            "upload_validation":
+                upload_validation,
+
+            "rejected_details":
+                rejected_images
+
+        },
+
         "location": {
 
             "name":
@@ -833,3 +1416,4 @@ async def analyze_disaster(
             "completed"
 
     }
+
