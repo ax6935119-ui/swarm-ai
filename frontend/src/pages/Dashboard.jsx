@@ -6,6 +6,8 @@ import DisasterInputPanel from "../components/DisasterInputPanel";
 import WelcomeScreen from "../components/WelcomeScreen";
 import AnalysisScreen from "../components/AnalysisScreen";
 import ResponseView from "../components/ResponseView";
+import IncidentQueue from "../components/IncidentQueue";
+import AdminCommandCenter from "../components/AdminCommandCenter";
 
 import useDashboardData from "../hooks/useDashboardData";
 import useGeolocation from "../hooks/useGeolocation";
@@ -60,6 +62,10 @@ export default function Dashboard() {
   // reporting
   // analyzing
   // response
+  // admin          ← new: incident queue
+  // admin-incident ← new: command center for a specific incident
+
+  const [adminIncident, setAdminIncident] = useState(null);
 
   // ============================================================
   // DISASTER STATE
@@ -323,6 +329,7 @@ export default function Dashboard() {
         onBegin={() =>
           setCurrentStep("reporting")
         }
+        onAdmin={() => setCurrentStep("admin")}
       />
     );
   }
@@ -334,7 +341,7 @@ export default function Dashboard() {
   if (currentStep === "analyzing") {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar />
+        <Navbar onAdmin={() => setCurrentStep("admin")} />
 
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center">
           <AnalysisScreen
@@ -357,7 +364,7 @@ export default function Dashboard() {
   ) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar />
+        <Navbar onAdmin={() => setCurrentStep("admin")} />
 
         <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-8">
           <ResponseView
@@ -371,13 +378,62 @@ export default function Dashboard() {
   }
 
   // ============================================================
+  // ADMIN — INCIDENT QUEUE
+  // ============================================================
+
+  if (currentStep === "admin") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <Navbar onAdmin={() => setCurrentStep("admin")} />
+
+        <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-8">
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={() => setCurrentStep("welcome")}
+              className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition font-mono uppercase tracking-wider cursor-pointer"
+            >
+              ← Back to Home
+            </button>
+          </div>
+          <IncidentQueue
+            onOpenIncident={(incident) => {
+              setAdminIncident(incident);
+              setCurrentStep("admin-incident");
+            }}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // ADMIN — INCIDENT COMMAND CENTER
+  // ============================================================
+
+  if (currentStep === "admin-incident" && adminIncident) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <Navbar onAdmin={() => setCurrentStep("admin")} />
+
+        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8">
+          <AdminCommandCenter
+            incident={adminIncident}
+            onBack={() => setCurrentStep("admin")}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // ============================================================
   // REPORTING SCREEN
   // ============================================================
 
   if (currentStep === "reporting") {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-        <Navbar />
+        <Navbar onAdmin={() => setCurrentStep("admin")} />
 
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col justify-center">
           <DisasterInputPanel

@@ -62,6 +62,20 @@ from api.scenario_routes import (
     router as scenario_router
 )
 
+# Round 2 routers
+from api.incident_routes import (
+    router as incident_router
+)
+
+from api.notification_routes import (
+    router as notification_router
+)
+
+from api.delegation_routes import (
+    router as delegation_router
+)
+
+
 
 # ============================================================
 # FASTAPI APPLICATION
@@ -226,6 +240,12 @@ app.include_router(
     scenario_router
 
 )
+
+
+# Round 2 routers
+app.include_router(incident_router)
+app.include_router(notification_router)
+app.include_router(delegation_router)
 
 
 # ============================================================

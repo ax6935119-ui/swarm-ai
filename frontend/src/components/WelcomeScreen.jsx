@@ -1,7 +1,9 @@
 import { motion } from "framer-motion";
-import { FaArrowRight, FaShieldAlt, FaRoute, FaDatabase } from "react-icons/fa";
+import { FaArrowRight, FaShieldAlt, FaRoute, FaDatabase, FaUserShield } from "react-icons/fa";
 
-export default function WelcomeScreen({ onBegin }) {
+
+export default function WelcomeScreen({ onBegin, onAdmin }) {
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -120,7 +122,7 @@ export default function WelcomeScreen({ onBegin }) {
         </motion.div>
 
         {/* Primary BEGIN Action */}
-        <motion.div variants={itemVariants} className="mt-10">
+        <motion.div variants={itemVariants} className="mt-10 flex flex-col sm:flex-row gap-3 items-center">
           <motion.button
             type="button"
             onClick={onBegin}
@@ -131,6 +133,19 @@ export default function WelcomeScreen({ onBegin }) {
             <span>BEGIN</span>
             <FaArrowRight className="text-sm" />
           </motion.button>
+
+          {onAdmin && (
+            <motion.button
+              type="button"
+              onClick={onAdmin}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.98 }}
+              className="px-8 py-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl transition-colors duration-200 flex items-center gap-3 text-base tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-slate-950"
+            >
+              <FaUserShield className="text-sm" />
+              <span>Admin Dashboard</span>
+            </motion.button>
+          )}
         </motion.div>
       </motion.main>
 

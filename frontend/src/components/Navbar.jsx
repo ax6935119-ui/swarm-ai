@@ -1,7 +1,8 @@
-import { FaRobot } from "react-icons/fa";
+import { FaRobot, FaUserShield } from "react-icons/fa";
 import { useEffect, useState } from "react";
 
-export default function Navbar() {
+export default function Navbar({ onAdmin }) {
+
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -52,20 +53,31 @@ export default function Navbar() {
         </div>
 
         {/* Right Side */}
-        <div className="text-right">
+        <div className="flex items-center gap-4">
+          {onAdmin && (
+            <button
+              type="button"
+              onClick={onAdmin}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+            >
+              <FaUserShield className="text-xs" />
+              Admin
+            </button>
+          )}
 
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 font-mono">
-            System Time
-          </p>
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-mono">
+              System Time
+            </p>
 
-          <p className="text-sm font-semibold text-slate-200 font-mono">
-            {time.toLocaleTimeString()}
-          </p>
+            <p className="text-sm font-semibold text-slate-200 font-mono">
+              {time.toLocaleTimeString()}
+            </p>
 
-          <p className="text-xs text-slate-500 font-mono">
-            {time.toLocaleDateString()}
-          </p>
-
+            <p className="text-xs text-slate-500 font-mono">
+              {time.toLocaleDateString()}
+            </p>
+          </div>
         </div>
 
       </div>
