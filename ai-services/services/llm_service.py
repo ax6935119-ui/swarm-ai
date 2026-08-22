@@ -1,3 +1,5 @@
+import os
+
 from groq import Groq
 
 from config.settings import GROQ_API_KEY
@@ -5,6 +7,11 @@ from config.settings import GROQ_API_KEY
 client = Groq(
     api_key=GROQ_API_KEY
 )
+
+ENABLE_AGENT_REASONING = os.getenv(
+    "ENABLE_AGENT_REASONING",
+    "false"
+).lower() == "true"
 
 
 def generate_reasoning(
@@ -16,12 +23,22 @@ def generate_reasoning(
     context
 ):
 
-    try:
+    disaster = context.get(
+        "disaster",
+        "Unknown"
+    )
 
-        disaster = context.get(
-            "disaster",
-            "Unknown"
-        )
+    severity = context.get(
+        "severity",
+        0
+    )
+
+    # Agent decisions are already computed locally. Keep four extra
+    # Groq calls disabled by default to avoid unnecessary quota usage.
+    if not ENABLE_AGENT_REASONING:
+        return f"Situation: {disaster} detected. Decision: {decision}. Severity: {severity}/10."
+
+    try:
 
         severity = context.get(
             "severity",
@@ -93,7 +110,7 @@ Keep it concise and realistic.
 
             temperature=0.7,
 
-            max_tokens=250
+            max_tokens=120
         )
 
         return response.choices[0].message.content

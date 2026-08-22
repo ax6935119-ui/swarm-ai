@@ -663,6 +663,61 @@ async def analyze_disaster(
 
     )
 
+    location_text = location.lower()
+    description_text = description.lower()
+
+    is_coastal_location = any(
+        keyword in location_text
+        for keyword in [
+            "marine drive",
+            "sea face",
+            "seaface",
+            "beach",
+            "coast"
+        ]
+    )
+
+    description_mentions_fire = any(
+        keyword in description_text
+        for keyword in [
+            "fire",
+            "wildfire",
+            "forest fire"
+        ]
+    )
+
+    if is_coastal_location and not description_mentions_fire:
+        location_valid_images = []
+
+        for image in valid_images:
+            predicted_label = str(
+                image.get("validation", {}).get(
+                    "predicted_label",
+                    ""
+                )
+            ).lower()
+
+            if (
+                "wildfire" in predicted_label
+                or "forest fire" in predicted_label
+            ):
+                rejected_images.append({
+                    "image_index": image.get("image_index"),
+                    "filename": image.get("filename"),
+                    "reason": (
+                        "Forest-fire image does not match the coastal incident location."
+                    ),
+                    "confidence": image.get("validation", {}).get(
+                        "confidence",
+                        0.0
+                    ),
+                    "predicted_label": predicted_label
+                })
+            else:
+                location_valid_images.append(image)
+
+        valid_images = location_valid_images
+
 
     print(
         f"\n✅ Disaster-related images: "

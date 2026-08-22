@@ -518,9 +518,12 @@ def select_best_facility(
 
             candidates = preferred
 
-    # Lower distance is better.
-    # Higher priority is better.
-    # Higher capacity is better.
+    # Facility type priority comes from the active agent strategy.
+    # Distance only breaks ties within the same response category.
+    preferred_ranks = {
+        str(facility_type).lower(): rank
+        for rank, facility_type in enumerate(preferred_types or [])
+    }
 
     def score(facility):
 
@@ -557,17 +560,14 @@ def select_best_facility(
             100
         )
 
+        type_rank = preferred_ranks.get(
+            str(facility.get("type", "")).lower(),
+            len(preferred_ranks)
+        )
+
         return (
-
-            distance_score
-
-            -
-
-            priority_bonus
-
-            -
-
-            capacity_bonus
+            type_rank,
+            distance_score - priority_bonus - capacity_bonus
         )
 
     return min(

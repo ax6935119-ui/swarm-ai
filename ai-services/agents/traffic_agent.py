@@ -298,6 +298,11 @@ class TrafficAgent(BaseAgent):
             for keyword in [
 
                 "flood",
+                "high tide",
+                "hightide",
+                "tidal",
+                "storm surge",
+                "coastal",
                 "landslide",
                 "storm",
                 "cyclone"
@@ -307,14 +312,14 @@ class TrafficAgent(BaseAgent):
 
             preferred_types = [
 
-                "fire_station",
                 "hospital",
                 "shelter",
-                "medical"
+                "medical",
+                "fire_station",
             ]
 
             vehicle_type = (
-                "rescue_vehicle"
+                "flood_rescue_vehicle"
             )
 
         # ----------------------------------------------------

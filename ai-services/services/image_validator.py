@@ -1,23 +1,22 @@
 import io
 import asyncio
 import threading
+import os
 
 from PIL import Image
 
 import torch
 
-from transformers import (
-    CLIPModel,
-    CLIPProcessor,
-)
+from transformers import AutoModel, AutoProcessor
 
 
 # ============================================================
 # MODEL CONFIGURATION
 # ============================================================
 
-MODEL_NAME = (
-    "openai/clip-vit-base-patch32"
+MODEL_NAME = os.getenv(
+    "VISION_MODEL_NAME",
+    "google/siglip-base-patch16-224"
 )
 
 
@@ -45,11 +44,11 @@ _model_lock = threading.Lock()
 
 DISASTER_LABELS = [
 
-    "a flood disaster",
+    "a flooded urban road",
 
-    "a wildfire emergency",
+    "a forest wildfire",
 
-    "a building fire emergency",
+    "an urban building fire",
 
     "a road accident",
 
@@ -62,6 +61,8 @@ DISASTER_LABELS = [
     "an earthquake damaged area",
 
     "a landslide disaster",
+
+    "a coastal high tide flood",
 
     "a severe storm emergency",
 
@@ -170,14 +171,14 @@ def get_model():
 
 
             _processor = (
-                CLIPProcessor.from_pretrained(
+                AutoProcessor.from_pretrained(
                     MODEL_NAME
                 )
             )
 
 
             _model = (
-                CLIPModel.from_pretrained(
+                AutoModel.from_pretrained(
                     MODEL_NAME
                 )
             )
@@ -284,7 +285,7 @@ def classify_image(
 
         return_tensors="pt",
 
-        padding=True,
+        padding="max_length",
 
     )
 
@@ -307,17 +308,9 @@ def classify_image(
         )
 
 
-    probabilities = (
-
-        outputs
-        .logits_per_image
-        .softmax(
-            dim=1
-        )[0]
-        .cpu()
-        .tolist()
-
-    )
+    probabilities = torch.sigmoid(
+        outputs.logits_per_image
+    )[0].cpu().tolist()
 
 
     # ========================================================
@@ -417,11 +410,8 @@ def classify_image(
     # ========================================================
 
     is_relevant = (
-
-        disaster_group_score
-        >
-        non_disaster_group_score
-
+        strongest_disaster_score >= 0.35
+        and strongest_disaster_score > strongest_non_disaster_score
     )
 
 

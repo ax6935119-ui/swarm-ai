@@ -3,6 +3,7 @@ DISASTER_CONFIG = {
         "search_places": [
             "hospital",
             "shelter",
+            "medical",
             "fire_station"
         ],
         "resources": [

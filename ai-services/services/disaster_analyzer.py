@@ -765,7 +765,8 @@ Return valid JSON only.
 
 def build_safe_fallback(
     images,
-    description
+    description,
+    location
 ):
 
     disaster_type = (
@@ -774,10 +775,79 @@ def build_safe_fallback(
         else "Unknown Disaster"
     )
 
+    description_text = str(
+        description or ""
+    ).lower()
+
+    location_text = str(
+        location or ""
+    ).lower()
+
+    explicit_fire = any(
+        keyword in description_text
+        for keyword in [
+            "fire",
+            "wildfire",
+            "forest fire"
+        ]
+    )
+
+    coastal_location = any(
+        keyword in location_text
+        for keyword in [
+            "marine drive",
+            "sea face",
+            "seaface",
+            "beach",
+            "coast"
+        ]
+    )
+
+    image_validation = []
+
+    for index, image in enumerate(images, start=1):
+        validation = image.get("validation", {})
+        predicted_label = str(
+            validation.get("predicted_label", "")
+        ).lower()
+
+        is_forest_fire = (
+            "wildfire" in predicted_label
+            or "forest fire" in predicted_label
+        )
+
+        relevant = not (
+            coastal_location
+            and is_forest_fire
+            and not explicit_fire
+        )
+
+        image_validation.append({
+            "image_index": image.get(
+                "image_index",
+                index
+            ),
+            "relevant": relevant,
+            "reason": (
+                "Forest-fire image does not match the coastal incident location."
+                if not relevant
+                else validation.get(
+                    "reason",
+                    "Accepted by upstream disaster image validation."
+                )
+            ),
+            "predicted_label": predicted_label
+        })
+
+    relevant_images = [
+        item for item in image_validation
+        if item["relevant"]
+    ]
+
     return {
 
         "disaster_relevant":
-            True,
+            bool(relevant_images),
 
         "disaster_type":
             disaster_type,
@@ -812,26 +882,86 @@ def build_safe_fallback(
             description or
             "Disaster event detected. AI vision analysis was unavailable.",
 
-        "image_validation": [
-
-            {
-
-                "image_index":
-                    index,
-
-                "relevant":
-                    True,
-
-                "reason":
-                    "Accepted by upstream disaster image validation."
-            }
-
-            for index in range(
-                1,
-                len(images) + 1
-            )
-        ]
+        "image_validation": image_validation
     }
+
+
+def enforce_image_consistency(
+    analysis,
+    images,
+    location,
+    description
+):
+
+    location_text = str(
+        location or ""
+    ).lower()
+
+    description_text = str(
+        description or ""
+    ).lower()
+
+    coastal_location = any(
+        keyword in location_text
+        for keyword in [
+            "marine drive",
+            "sea face",
+            "seaface",
+            "beach",
+            "coast"
+        ]
+    )
+
+    explicit_fire = any(
+        keyword in description_text
+        for keyword in [
+            "fire",
+            "wildfire",
+            "forest fire"
+        ]
+    )
+
+    if not coastal_location or explicit_fire:
+        return analysis
+
+    validation_by_index = {
+        image.get("image_index"): image.get(
+            "validation",
+            {}
+        )
+        for image in images
+    }
+
+    rejected_indices = set()
+
+    for item in analysis.get("image_validation", []):
+        image_index = item.get("image_index")
+        validation = validation_by_index.get(
+            image_index,
+            {}
+        )
+        predicted_label = str(
+            validation.get("predicted_label", "")
+        ).lower()
+
+        if (
+            "wildfire" in predicted_label
+            or "forest fire" in predicted_label
+        ):
+            item["relevant"] = False
+            item["reason"] = (
+                "Forest-fire image does not match the coastal incident location."
+            )
+            rejected_indices.add(image_index)
+
+    if rejected_indices:
+        remaining = [
+            item for item in analysis["image_validation"]
+            if item.get("relevant")
+        ]
+        analysis["disaster_relevant"] = bool(remaining)
+
+    return analysis
 
 
 # ============================================================
@@ -950,14 +1080,14 @@ async def analyze_disaster_image(
 
     last_error = None
 
-    for attempt in range(1, 3):
+    for attempt in range(1, 2):
 
         print("\n")
         print("=" * 70)
 
         print(
             f"🤖 AI ANALYSIS ATTEMPT "
-            f"{attempt}/2"
+            f"{attempt}/1"
         )
 
         print("=" * 70)
@@ -1000,6 +1130,13 @@ async def analyze_disaster_image(
                 parsed,
 
                 len(images)
+            )
+
+            analysis = enforce_image_consistency(
+                analysis,
+                images,
+                location,
+                description
             )
 
             print("\n")
@@ -1060,7 +1197,8 @@ async def analyze_disaster_image(
 
     fallback = build_safe_fallback(
         images,
-        description
+        description,
+        location
     )
 
     return normalize_analysis(
