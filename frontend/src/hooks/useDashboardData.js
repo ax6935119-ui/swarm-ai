@@ -376,6 +376,14 @@ export default function useDashboardData() {
 
         coordinates,
 
+        facilities:
+          trafficAgent?.traffic_response?.nearby_facilities ??
+          [],
+
+        vehicleType:
+          trafficAgent?.traffic_response?.vehicle_type ??
+          "ambulance",
+
         heatZones:
           backendData.heatZones ??
           [],

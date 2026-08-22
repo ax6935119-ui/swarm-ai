@@ -667,7 +667,123 @@ async def analyze_disaster(
     rejected_images = [img for img in upload_validation if not img.get("accepted")]
 
     print(
-        f"\n✅ Valid disaster evidence images: "
+        "🔍 STARTING DISASTER IMAGE VALIDATION"
+    )
+
+    print("=" * 70)
+
+
+    try:
+
+        validation_result = (
+
+            await validate_disaster_images(
+
+                images=prepared_images
+
+            )
+
+        )
+
+    except Exception as e:
+
+        print(
+            "\n❌ IMAGE VALIDATOR FAILED"
+        )
+
+        print(
+            "Error:",
+            e
+        )
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=
+                "Image validation service failed."
+
+        )
+
+
+    # ========================================================
+    # EXTRACT VALID / REJECTED IMAGES
+    # ========================================================
+
+    valid_images = validation_result.get(
+
+        "valid_images",
+
+        []
+
+    )
+
+    rejected_images = validation_result.get(
+
+        "rejected_images",
+
+        []
+
+    )
+
+    location_text = location.lower()
+    description_text = description.lower()
+
+    is_coastal_location = any(
+        keyword in location_text
+        for keyword in [
+            "marine drive",
+            "sea face",
+            "seaface",
+            "beach",
+            "coast"
+        ]
+    )
+
+    description_mentions_fire = any(
+        keyword in description_text
+        for keyword in [
+            "fire",
+            "wildfire",
+            "forest fire"
+        ]
+    )
+
+    if is_coastal_location and not description_mentions_fire:
+        location_valid_images = []
+
+        for image in valid_images:
+            predicted_label = str(
+                image.get("validation", {}).get(
+                    "predicted_label",
+                    ""
+                )
+            ).lower()
+
+            if (
+                "wildfire" in predicted_label
+                or "forest fire" in predicted_label
+            ):
+                rejected_images.append({
+                    "image_index": image.get("image_index"),
+                    "filename": image.get("filename"),
+                    "reason": (
+                        "Forest-fire image does not match the coastal incident location."
+                    ),
+                    "confidence": image.get("validation", {}).get(
+                        "confidence",
+                        0.0
+                    ),
+                    "predicted_label": predicted_label
+                })
+            else:
+                location_valid_images.append(image)
+
+        valid_images = location_valid_images
+
+
+    print(
+        f"\n✅ Disaster-related images: "
         f"{len(valid_images)}"
     )
 

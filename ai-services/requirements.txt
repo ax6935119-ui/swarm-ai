@@ -8,3 +8,6 @@ networkx
 pymongo
 python-multipart
 Pillow
+torch
+transformers
+sentencepiece

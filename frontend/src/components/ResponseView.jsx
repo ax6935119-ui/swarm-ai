@@ -87,10 +87,17 @@ export default function ResponseView({ data, onReset, userLocation = null }) {
 
   // Prepare map data structure expected by MapDashboard
   const mapData = {
+    event,
+    agents: {
+      TrafficAgent: trafficData,
+    },
+    traffic_response: trafficData?.traffic_response,
+    resources: resourceData?.decision?.resources ?? {},
     map: {
       latitude: location?.latitude ?? event.latitude,
       longitude: location?.longitude ?? event.longitude,
       coordinates: route_coordinates,
+      facilities: trafficData?.traffic_response?.nearby_facilities ?? [],
       affectedArea: disasterType,
       location: locationName,
     },

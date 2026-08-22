@@ -22,10 +22,16 @@ export default function MapDashboard({
   const ambulanceRef =
     useRef(null);
 
+  const vehicleMarkersRef =
+    useRef([]);
+
   const animationRef =
     useRef(null);
 
   const markersRef =
+    useRef([]);
+
+  const facilityMarkersRef =
     useRef([]);
 
   const mapLoadedRef =
@@ -33,6 +39,9 @@ export default function MapDashboard({
 
   const [mapReady, setMapReady] =
     useState(false);
+
+  const [facilityFilter, setFacilityFilter] =
+    useState("all");
 
 
   const [
@@ -150,8 +159,22 @@ export default function MapDashboard({
         marker => marker.remove()
       );
 
+      facilityMarkersRef.current.forEach(
+        marker => marker.remove()
+      );
+
 
       markersRef.current =
+        [];
+
+      facilityMarkersRef.current.forEach(
+        marker => marker.remove()
+      );
+
+      facilityMarkersRef.current =
+        [];
+
+      facilityMarkersRef.current =
         [];
 
 
@@ -161,7 +184,22 @@ export default function MapDashboard({
 
         ambulanceRef.current.remove();
 
+        ambulanceRef.current =
+          null;
+
       }
+
+      vehicleMarkersRef.current.forEach(
+        marker => marker.remove()
+      );
+
+      vehicleMarkersRef.current = [];
+
+      vehicleMarkersRef.current.forEach(
+        marker => marker.remove()
+      );
+
+      vehicleMarkersRef.current = [];
 
 
       map.remove();
@@ -293,6 +331,28 @@ export default function MapDashboard({
             )
           )
 
+      );
+
+    };
+
+  const getNearbyFacilities =
+    () => {
+
+      const facilities =
+        data?.map?.facilities ||
+        data?.traffic_response?.nearby_facilities ||
+        data?.agents?.TrafficAgent?.traffic_response?.nearby_facilities ||
+        [];
+
+      if (!Array.isArray(facilities)) {
+        return [];
+      }
+
+      return facilities.filter(
+        facility =>
+          Number.isFinite(Number(facility?.lat)) &&
+          Number.isFinite(Number(facility?.lng)) &&
+          (facilityFilter === "all" || facility?.type === facilityFilter)
       );
 
     };
@@ -618,6 +678,12 @@ export default function MapDashboard({
 
       }
 
+      vehicleMarkersRef.current.forEach(
+        marker => marker.remove()
+      );
+
+      vehicleMarkersRef.current = [];
+
 
       if (
         animationRef.current
@@ -861,6 +927,10 @@ export default function MapDashboard({
 
       addMarkers(
         coords
+      );
+
+      addFacilityMarkers(
+        getNearbyFacilities()
       );
 
 
@@ -1419,6 +1489,62 @@ export default function MapDashboard({
 
     };
 
+  const addFacilityMarkers =
+    (facilities) => {
+
+      const map = mapRef.current;
+
+      if (!map) return;
+
+      facilityMarkersRef.current.forEach(
+        marker => marker.remove()
+      );
+
+      facilityMarkersRef.current = [];
+
+      facilities.forEach(
+        facility => {
+
+          const type = String(
+            facility.type || "facility"
+          ).toLowerCase();
+
+          const element = document.createElement("div");
+          element.className = "custom-map-marker";
+          element.textContent =
+            type === "fire_station" ? "🚒" :
+            type === "shelter" ? "🏠" :
+            "🏥";
+          element.style.width = "38px";
+          element.style.height = "38px";
+          element.style.display = "flex";
+          element.style.alignItems = "center";
+          element.style.justifyContent = "center";
+          element.style.fontSize = "20px";
+          element.style.border = "2px solid white";
+          element.style.borderRadius = "50%";
+          element.style.background =
+            type === "fire_station" ? "#f97316" :
+            type === "shelter" ? "#16a34a" :
+            "#2563eb";
+          element.style.boxShadow = "0 0 18px rgba(255,255,255,0.55)";
+
+          const marker = new maplibregl.Marker({ element })
+            .setLngLat([Number(facility.lng), Number(facility.lat)])
+            .setPopup(
+              new maplibregl.Popup({ offset: 18 }).setText(
+                `${facility.name || "Emergency Facility"} (${type})`
+              )
+            )
+            .addTo(map);
+
+          facilityMarkersRef.current.push(marker);
+
+        }
+      );
+
+    };
+
 
   // =========================================================
   // FIT ROUTE
@@ -1646,6 +1772,37 @@ export default function MapDashboard({
             map
           );
 
+      vehicleMarkersRef.current = [
+        ambulanceRef.current,
+      ];
+
+      const resources =
+        data?.resources ||
+        data?.agents?.ResourceAgent?.decision?.resources ||
+        {};
+
+      const supportCount = normalizedVehicleType.includes("fire")
+        ? Math.min(Math.max(Number(resources.fire_units || 1) - 1, 0), 3)
+        : normalizedVehicleType.includes("flood")
+          ? Math.min(Math.max(Number(resources.rescue_teams || 1) - 1, 0), 2)
+          : 0;
+
+      for (let vehicleIndex = 0; vehicleIndex < supportCount; vehicleIndex += 1) {
+        const supportVehicle = document.createElement("div");
+        supportVehicle.innerHTML = normalizedVehicleType.includes("fire") ? "🚒" : "🚤";
+        supportVehicle.style.fontSize = "28px";
+        supportVehicle.style.filter = "drop-shadow(0 0 9px rgba(239,68,68,0.85))";
+
+        const supportMarker = new maplibregl.Marker({
+          element: supportVehicle,
+          anchor: "center",
+        })
+          .setLngLat(routeCoords[0])
+          .addTo(map);
+
+        vehicleMarkersRef.current.push(supportMarker);
+      }
+
 
       let index =
         0;
@@ -1688,14 +1845,18 @@ export default function MapDashboard({
             }
 
 
-            ambulanceRef.current
-              ?.setLngLat(
-
-                routeCoords[
-                  index
-                ]
-
-              );
+            vehicleMarkersRef.current.forEach(
+              (marker, vehicleIndex) => {
+                marker.setLngLat(
+                  routeCoords[
+                    Math.min(
+                      index + vehicleIndex,
+                      routeCoords.length - 1
+                    )
+                  ]
+                );
+              }
+            );
 
 
             index += 1;
@@ -1774,6 +1935,36 @@ export default function MapDashboard({
 
 
           <div>
+
+          <div className="absolute top-24 right-4 z-10 flex flex-col items-end gap-2">
+            <div className="flex gap-1 rounded-lg border border-slate-700 bg-slate-950/90 p-1 shadow-lg backdrop-blur">
+              {[
+                ["all", "All"],
+                ["hospital", "Hospitals"],
+                ["fire_station", "Fire"],
+                ["shelter", "Shelters"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setFacilityFilter(value)}
+                  className={`rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition ${
+                    facilityFilter === value
+                      ? "bg-red-500 text-white"
+                      : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-950/85 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-300 backdrop-blur">
+              <span><b className="mr-1 text-blue-400">🏥</b> Medical</span>
+              <span><b className="mr-1 text-orange-400">🚒</b> Fire</span>
+              <span><b className="mr-1 text-green-400">🏠</b> Shelter</span>
+            </div>
+          </div>
 
             <h2 className="
 
